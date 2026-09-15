@@ -68,8 +68,10 @@ export class ItemWorld {
     this.shots.push({
       mesh,
       owner: kart,
-      vel: new THREE.Vector3(Math.sin(kart.yaw) * 38, 2.2, Math.cos(kart.yaw) * 38),
+      vel: new THREE.Vector3(Math.sin(kart.yaw) * 38, 0, Math.cos(kart.yaw) * 38),
       life: 2.4,
+      // Green-shell-like projectiles stay on the track surface and bounce off the walls.
+      wallCooldown: 0,
     });
   }
 
@@ -103,14 +105,40 @@ export class ItemWorld {
     }
   }
 
-  update(dt, karts, audio) {
+  update(dt, karts, audio, track = null) {
     for (let i = this.shots.length - 1; i >= 0; i--) {
       const s = this.shots[i];
       s.life -= dt;
-      s.vel.y -= 9 * dt;
+      s.wallCooldown = Math.max(0, s.wallCooldown - dt);
+
+      // The acorn behaves like a green shell: it follows the track surface,
+      // reflects off either track edge, and only disappears when its timer expires.
+      if (track) {
+        const hit = track.project(s.mesh.position);
+        const halfWidth = track.halfWidthAt(hit.t);
+        const wallMargin = 0.08;
+        if (Math.abs(hit.lateral) > halfWidth - wallMargin && s.wallCooldown <= 0) {
+          const side = hit.lateral >= 0 ? 1 : -1;
+          const normal = hit.binormal.clone().multiplyScalar(side);
+          const inward = -normal.dot(s.vel);
+          if (inward > 0) {
+            s.vel.addScaledVector(normal, 2 * inward);
+            s.mesh.position.x = hit.point.x + hit.binormal.x * (halfWidth - wallMargin) * side;
+            s.mesh.position.z = hit.point.z + hit.binormal.z * (halfWidth - wallMargin) * side;
+            s.wallCooldown = 0.08;
+          }
+        }
+      }
+
+      // Keep the projectile on the road instead of letting gravity pull it
+      // into the course/ground. It still retains the existing lifetime.
+      s.vel.y = 0;
+      s.mesh.position.y = track ? track.project(s.mesh.position).point.y + 0.5 : 0.5;
       s.mesh.position.addScaledVector(s.vel, dt);
-      s.mesh.rotation.x += dt * 8;
-      let dead = s.life <= 0 || s.mesh.position.y < 0;
+      s.mesh.rotation.x += dt * 10;
+      s.mesh.rotation.z += dt * 7;
+
+      let dead = s.life <= 0;
       for (const k of karts) {
         if (k === s.owner || k.finished) continue;
         if (k.pos.distanceTo(s.mesh.position) < 1.15) {
