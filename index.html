@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
+    />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="むしカート" />
+    <meta name="theme-color" content="#3d7c3a" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" href="./icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
+    <title>むしカート</title>
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="game-canvas"></canvas>
+      <div id="boost-glow"></div>
+
+      <section id="screen-title" class="screen" data-stage="garden">
+        <div class="bg-bugs" aria-hidden="true"></div>
+        <p id="title-badge" class="badge">GARDEN GRAND PRIX</p>
+        <h1 class="logo">むしカート</h1>
+        <p id="title-subtitle" class="subtitle">朝露ガーデン</p>
+        <button type="button" id="btn-stage" class="btn stage-swap">
+          ステージ変更
+          <small id="stage-label">🌿 朝露ガーデン</small>
+        </button>
+        <canvas id="title-canvas" width="280" height="220"></canvas>
+        <button type="button" id="title-best" class="title-best">自己ベスト なし</button>
+        <div class="mode-row">
+          <button id="btn-time" class="btn primary">タイムアタック</button>
+          <button id="btn-cpu" class="btn primary leaf">CPU対戦</button>
+        </div>
+        <button type="button" id="btn-last-run" class="btn last-run hidden">
+          前回のカスタムでスタート
+          <small id="last-run-label"></small>
+        </button>
+        <div class="title-row">
+          <button id="btn-records" class="btn ghost">自己ベスト</button>
+          <button id="btn-howto" class="btn ghost">あそびかた</button>
+          <button id="btn-gyro" class="btn ghost">傾けてハンドル：オフ</button>
+          <button id="btn-music" class="btn ghost">音楽</button>
+        </div>
+        <p id="gyro-hint" class="hint hidden">傾けてハンドルはHTTPSが必要です。まずはhttpで遊べます</p>
+        <div id="iphone-join" class="iphone-join hidden">
+          <p>同じWi-FiのiPhoneで開く</p>
+          <img id="iphone-qr" alt="iPhone用QRコード" width="160" height="160" />
+          <code id="iphone-url"></code>
+        </div>
+        <p class="hint">Safariの共有 → ホーム画面に追加 で全画面になります</p>
+      </section>
+
+      <section id="screen-howto" class="screen hidden">
+        <h2>あそびかた</h2>
+        <ul class="howto">
+          <li><strong>タイムアタック</strong>は一人で記録を狙うよ。どのコースも<strong>3周</strong>でゴール</li>
+          <li>タイトルの<strong>ステージ変更</strong>で、ガーデン・海・火山を切り替えられるよ。BGMもコースに合わせて変わるよ。自己ベストもコースごと</li>
+          <li>コース上にはむしの<strong>天敵</strong>が決まった動きでいるよ。ガーデンは<strong>鳥</strong>、海は<strong>魚</strong>、火山は<strong>炎</strong>。近いと画面に出るよ。当たると止まってしまう</li>
+          <li><strong>傾けてハンドル</strong>は、HTTPSで開いたiPhoneで使えるよ</li>
+          <li><strong>CPU対戦</strong>は3台のむしと順位を争うよ</li>
+          <li>レース前に<strong>ボディ</strong>と<strong>タイヤ</strong>を選ぶと、重さ・曲がりやすさ・スピード・加速が変わるよ</li>
+          <li>カートは<strong>じどうで走る</strong>よ</li>
+          <li>画面の<strong>左がわを指で左右</strong>にすべらせて曲がる</li>
+          <li><strong>ドリフト</strong>は曲がりながら長押し。押している間は左右に動きにくい。3秒ためると1.5秒スピードアップする</li>
+          <li>金色のハチの巣に当たるとアイテムが出る（持っているときは取れない）</li>
+          <li>キーボードなら ← → でハンドル、Shift でドリフト、Space でアイテム</li>
+        </ul>
+        <h3 class="howto-sub">アイテム</h3>
+        <ul class="howto items">
+          <li><strong>🍯 ハチミツ</strong> … 自分が一気に加速する</li>
+          <li><strong>🌰 どんぐり</strong> … 前に投げて当たったカートを止める</li>
+          <li><strong>🕸️ クモの糸</strong> … うしろに置く。踏むと動けなくなる</li>
+          <li><strong>🍃 はっぱ</strong> … しばらく攻撃を防ぐ盾になる</li>
+          <li><strong>💨 かぜ</strong> … 近くのカートをまとめて吹き飛ばす</li>
+        </ul>
+        <button id="btn-howto-back" class="btn primary">もどる</button>
+      </section>
+
+      <section id="screen-records" class="screen hidden">
+        <h2>自己ベスト</h2>
+        <p id="records-course" class="records-course">朝露ガーデン</p>
+        <div id="records-body" class="records-body"></div>
+        <button id="btn-records-back" class="btn primary">もどる</button>
+      </section>
+
+      <section id="screen-select" class="screen hidden">
+        <h2 id="select-title">カートを組もう</h2>
+        <p id="select-course" class="select-course">🌿 朝露ガーデン</p>
+        <p id="select-mode" class="char-desc"></p>
+        <canvas id="select-canvas" width="260" height="200"></canvas>
+        <div id="stat-bars" class="stat-bars"></div>
+        <div class="garage-tabs" role="tablist">
+          <button type="button" id="tab-char" class="tab on" data-tab="char">むし</button>
+          <button type="button" id="tab-body" class="tab" data-tab="body">ボディ</button>
+          <button type="button" id="tab-tire" class="tab" data-tab="tire">タイヤ</button>
+        </div>
+        <div id="garage-grid" class="char-grid"></div>
+        <p id="kit-summary" class="kit-summary"></p>
+        <p id="char-desc" class="char-desc"></p>
+        <button id="btn-race" class="btn primary">レース開始</button>
+      </section>
+
+      <section id="screen-race" class="screen hidden race">
+        <div class="hud-top">
+          <div class="place-wrap" id="place-wrap">
+            <span id="hud-place">1</span>
+            <small>い</small>
+          </div>
+          <div class="hud-mid">
+            <div id="hud-lap">LAP 1/3</div>
+            <div id="hud-time">0:00.000</div>
+            <div id="hud-best" class="hud-best"></div>
+          </div>
+          <canvas id="minimap" width="140" height="140"></canvas>
+        </div>
+
+        <button type="button" id="btn-pause" class="pause-btn">中断</button>
+
+        <div id="pause-overlay" class="pause-overlay hidden">
+          <h2>中断</h2>
+          <button type="button" id="btn-pause-retry" class="btn primary">リトライ</button>
+          <button type="button" id="btn-pause-title" class="btn primary leaf">タイトルへ</button>
+          <button type="button" id="btn-pause-mix" class="btn ghost">音量</button>
+          <button type="button" id="btn-resume" class="btn ghost">つづける</button>
+        </div>
+
+        <div id="countdown"></div>
+        <div id="race-banner"></div>
+        <div id="enemy-warn" class="enemy-warn hidden">鳥が近い</div>
+        <div id="rotate-hint">横向きにすると走りやすいよ</div>
+
+        <ol id="hud-standings" class="standings hidden"></ol>
+
+        <div class="item-slot" id="item-slot">
+          <span id="item-icon">空</span>
+        </div>
+
+        <div class="touch-layer">
+          <div id="steer-zone">
+            <div id="steer-knob"></div>
+          </div>
+          <div class="btn-col">
+            <button id="btn-item" class="ctrl">アイテム</button>
+            <button id="btn-drift" class="ctrl">ドリフト</button>
+            <button id="btn-brake" class="ctrl slim">ブレーキ</button>
+          </div>
+        </div>
+      </section>
+
+      <section id="screen-result" class="screen hidden">
+        <h2 id="result-title">けっかはっぴょう</h2>
+        <p id="result-note" class="char-desc"></p>
+        <ol id="result-list" class="result-list"></ol>
+        <div class="title-row">
+          <button id="btn-retry" class="btn primary">もういちど</button>
+          <button id="btn-title" class="btn ghost">タイトルへ</button>
+        </div>
+      </section>
+
+      <div id="mix-panel" class="mix-panel hidden">
+        <div class="mix-card">
+          <p class="mix-title">音量</p>
+          <div class="mix-row">
+            <span>BGM</span>
+            <div class="mix-track" id="mix-bgm">
+              <div class="mix-fill bgm"></div>
+              <div class="mix-knob"></div>
+            </div>
+            <strong id="mix-bgm-val">100</strong>
+          </div>
+          <div class="mix-row">
+            <span>エンジン</span>
+            <div class="mix-track" id="mix-engine">
+              <div class="mix-fill engine"></div>
+              <div class="mix-knob"></div>
+            </div>
+            <strong id="mix-engine-val">100</strong>
+          </div>
+          <button type="button" id="mix-close" class="btn ghost">とじる</button>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

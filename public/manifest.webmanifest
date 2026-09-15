@@ -1,0 +1,24 @@
+{
+  "name": "むしカート",
+  "short_name": "むしカート",
+  "description": "庭園サーキットを駆け抜ける3Dむしレース",
+  "start_url": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#7eb8d4",
+  "theme_color": "#3d7c3a",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
