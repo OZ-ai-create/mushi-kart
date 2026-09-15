@@ -143,9 +143,10 @@ export class ItemWorld {
       if (Math.abs(hit.lateral) > halfWidth - wallMargin && s.wallCooldown <= 0) {
         const side = hit.lateral >= 0 ? 1 : -1;
         const normal = hit.binormal.clone().multiplyScalar(side);
-        const inward = -normal.dot(s.vel);
-        if (inward > 0) {
-          s.vel.addScaledVector(normal, 2 * inward);
+        // Track binormals point toward the outside wall. Reflect only when moving outward.
+        const outwardSpeed = normal.dot(s.vel);
+        if (outwardSpeed > 0) {
+          s.vel.addScaledVector(normal, -2 * outwardSpeed);
           s.mesh.position.x = hit.point.x + hit.binormal.x * (halfWidth - wallMargin) * side;
           s.mesh.position.z = hit.point.z + hit.binormal.z * (halfWidth - wallMargin) * side;
           s.wallCooldown = 0.08;
