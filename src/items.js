@@ -1,4 +1,6 @@
 import * as THREE from "three";
+import { Track } from "./track.js";
+import { getCourse } from "./courses.js";
 
 export const ITEM_DEFS = [
   { id: "honey", name: "ハチミツ", icon: "🍯", weight: 3 },
@@ -30,6 +32,8 @@ export class ItemWorld {
     this.shots = [];
     this.traps = [];
     this.rings = [];
+    this.track = null;
+    this.trackId = null;
   }
 
   use(kart, karts, audio) {
@@ -70,7 +74,6 @@ export class ItemWorld {
       owner: kart,
       vel: new THREE.Vector3(Math.sin(kart.yaw) * 38, 0, Math.cos(kart.yaw) * 38),
       life: 2.4,
-      // Green-shell-like projectiles stay on the track surface and bounce off the walls.
       wallCooldown: 0,
     });
   }
@@ -105,35 +108,53 @@ export class ItemWorld {
     }
   }
 
+  _resolveTrack(track) {
+    if (track) return track;
+
+    const fogHex = this.scene.fog?.color?.getHex?.() ?? getCourse("garden").fog;
+    const courses = ["garden", "sea", "volcano"];
+    let courseId = "garden";
+    for (const id of courses) {
+      if (getCourse(id).fog === fogHex) {
+        courseId = id;
+        break;
+      }
+    }
+
+    if (!this.track || this.trackId !== courseId) {
+      this.track = new Track(courseId);
+      this.trackId = courseId;
+    }
+    return this.track;
+  }
+
   update(dt, karts, audio, track = null) {
+    track = this._resolveTrack(track);
+
     for (let i = this.shots.length - 1; i >= 0; i--) {
       const s = this.shots[i];
       s.life -= dt;
       s.wallCooldown = Math.max(0, s.wallCooldown - dt);
 
-      // The acorn behaves like a green shell: it follows the track surface,
-      // reflects off either track edge, and only disappears when its timer expires.
-      if (track) {
-        const hit = track.project(s.mesh.position);
-        const halfWidth = track.halfWidthAt(hit.t);
-        const wallMargin = 0.08;
-        if (Math.abs(hit.lateral) > halfWidth - wallMargin && s.wallCooldown <= 0) {
-          const side = hit.lateral >= 0 ? 1 : -1;
-          const normal = hit.binormal.clone().multiplyScalar(side);
-          const inward = -normal.dot(s.vel);
-          if (inward > 0) {
-            s.vel.addScaledVector(normal, 2 * inward);
-            s.mesh.position.x = hit.point.x + hit.binormal.x * (halfWidth - wallMargin) * side;
-            s.mesh.position.z = hit.point.z + hit.binormal.z * (halfWidth - wallMargin) * side;
-            s.wallCooldown = 0.08;
-          }
+      // Green-shell-like projectiles stay on the track surface and bounce off the walls.
+      const hit = track.project(s.mesh.position);
+      const halfWidth = track.halfWidthAt(hit.t);
+      const wallMargin = 0.08;
+      if (Math.abs(hit.lateral) > halfWidth - wallMargin && s.wallCooldown <= 0) {
+        const side = hit.lateral >= 0 ? 1 : -1;
+        const normal = hit.binormal.clone().multiplyScalar(side);
+        const inward = -normal.dot(s.vel);
+        if (inward > 0) {
+          s.vel.addScaledVector(normal, 2 * inward);
+          s.mesh.position.x = hit.point.x + hit.binormal.x * (halfWidth - wallMargin) * side;
+          s.mesh.position.z = hit.point.z + hit.binormal.z * (halfWidth - wallMargin) * side;
+          s.wallCooldown = 0.08;
         }
       }
 
-      // Keep the projectile on the road instead of letting gravity pull it
-      // into the course/ground. It still retains the existing lifetime.
+      // Keep the projectile on the road instead of letting gravity pull it into the course/ground.
       s.vel.y = 0;
-      s.mesh.position.y = track ? track.project(s.mesh.position).point.y + 0.5 : 0.5;
+      s.mesh.position.y = hit.point.y + 0.5;
       s.mesh.position.addScaledVector(s.vel, dt);
       s.mesh.rotation.x += dt * 10;
       s.mesh.rotation.z += dt * 7;
@@ -198,6 +219,8 @@ export class ItemWorld {
     this.shots.length = 0;
     this.traps.length = 0;
     this.rings.length = 0;
+    this.track = null;
+    this.trackId = null;
   }
 }
 
