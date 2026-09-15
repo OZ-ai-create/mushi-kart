@@ -5,6 +5,7 @@ import { getCourse } from "./courses.js";
 export const ITEM_DEFS = [
   { id: "honey", name: "ハチミツ", icon: "🍯", weight: 3 },
   { id: "acorn", name: "どんぐり", icon: "🌰", weight: 3 },
+  { id: "homing", name: "てんとう虫ミサイル", icon: "🐞", weight: 2 },
   { id: "silk", name: "クモの糸", icon: "🕸️", weight: 2 },
   { id: "leaf", name: "はっぱ", icon: "🍃", weight: 2 },
   { id: "gust", name: "かぜ", icon: "💨", weight: 1 },
@@ -22,6 +23,7 @@ export function rollItem(place) {
     if (place === 1 && it.id === "silk") w += 1;
     if (place === 1 && it.id === "electric") w += 1;
     if (place >= 3 && it.id === "mushroom") w += 1;
+    if (place >= 3 && it.id === "homing") w += 2;
     for (let i = 0; i < w; i++) bag.push(it);
   }
   return bag[Math.floor(Math.random() * bag.length)] ?? ITEM_DEFS[0];
@@ -35,6 +37,7 @@ export class ItemWorld {
   constructor(scene) {
     this.scene = scene;
     this.shots = [];
+    this.homingShots = [];
     this.traps = [];
     this.rings = [];
     this.ants = [];
@@ -52,6 +55,8 @@ export class ItemWorld {
       audio?.boost();
     } else if (id === "acorn") {
       this._acorn(kart);
+    } else if (id === "homing") {
+      this._homing(kart, karts);
     } else if (id === "silk") {
       this._silk(kart);
     } else if (id === "leaf") {
@@ -90,6 +95,49 @@ export class ItemWorld {
     });
   }
 
+  _homing(kart, karts) {
+    let target = null;
+    let bestProgress = -Infinity;
+    let bestDistance = Infinity;
+    for (const other of karts) {
+      if (other === kart || other.finished) continue;
+      const ahead = other.progress > kart.progress + 0.005;
+      const distance = other.pos.distanceTo(kart.pos);
+      if (ahead && other.progress > bestProgress) {
+        target = other;
+        bestProgress = other.progress;
+        bestDistance = distance;
+      } else if (!target && distance < bestDistance) {
+        target = other;
+        bestDistance = distance;
+      }
+    }
+
+    const body = new THREE.Mesh(
+      new THREE.SphereGeometry(0.42, 12, 10),
+      new THREE.MeshLambertMaterial({ color: 0xd93b32 })
+    );
+    const spot = new THREE.Mesh(
+      new THREE.SphereGeometry(0.12, 8, 6),
+      new THREE.MeshLambertMaterial({ color: 0xf4e6a8 })
+    );
+    spot.position.set(0.2, 0.18, 0.24);
+    body.add(spot);
+    body.position.copy(kart.pos);
+    body.position.y += 0.55;
+    this.scene.add(body);
+
+    const vel = new THREE.Vector3(Math.sin(kart.yaw) * 30, 0, Math.cos(kart.yaw) * 30);
+    this.homingShots.push({
+      mesh: body,
+      owner: kart,
+      target,
+      vel,
+      life: 4.2,
+      wallCooldown: 0,
+    });
+  }
+
   _silk(kart) {
     const mesh = new THREE.Mesh(
       new THREE.CircleGeometry(0.9, 10),
@@ -122,35 +170,33 @@ export class ItemWorld {
 
   _electric(kart, karts, audio) {
     let target = null;
-    let best = Infinity;
     for (const other of karts) {
-      if (other === kart || other.finished) continue;
-      const distance = other.pos.distanceTo(kart.pos);
-      if (distance < 18 && distance < best) {
-        best = distance;
-        target = other;
-      }
+      if (other.finished) continue;
+      if (!target || other.progress > target.progress) target = other;
     }
+
+    if (!target) return;
+
     const ring = new THREE.Mesh(
       new THREE.RingGeometry(0.5, 0.72, 16),
       new THREE.MeshBasicMaterial({ color: 0xfff06a, transparent: true, opacity: 0.9, side: THREE.DoubleSide })
     );
     ring.rotation.x = -Math.PI / 2;
-    ring.position.copy(kart.pos);
-    ring.position.y += 0.22;
+    ring.position.copy(target.pos);
+    ring.position.y += 0.25;
     this.scene.add(ring);
     this.rings.push({ mesh: ring, life: 0.7 });
-    if (target) {
-      if (target.shield > 0) target.shield = 0;
-      else {
-        target.stun = Math.max(target.stun, 1.0);
-        target.speed *= 0.3;
-        target.hitFlash = 0.75;
-        target.boost = 0;
-        audio?.hit();
-        if (target.isPlayer && navigator.vibrate) navigator.vibrate([25, 35, 25]);
-      }
+
+    if (target.shield > 0) {
+      target.shield = 0;
+      return;
     }
+    target.stun = Math.max(target.stun, 1.2);
+    target.speed *= 0.25;
+    target.hitFlash = 0.9;
+    target.boost = 0;
+    audio?.hit();
+    if (target.isPlayer && navigator.vibrate) navigator.vibrate([25, 35, 25]);
   }
 
   _mushroom(kart, audio) {
@@ -202,34 +248,38 @@ export class ItemWorld {
     return this.track;
   }
 
+  _updateShotPhysics(s, dt, track) {
+    s.life -= dt;
+    s.wallCooldown = Math.max(0, s.wallCooldown - dt);
+
+    const hit = track.project(s.mesh.position);
+    const halfWidth = track.halfWidthAt(hit.t);
+    const wallMargin = 0.08;
+    if (Math.abs(hit.lateral) > halfWidth - wallMargin && s.wallCooldown <= 0) {
+      const side = hit.lateral >= 0 ? 1 : -1;
+      const normal = hit.binormal.clone().multiplyScalar(side);
+      const outwardSpeed = normal.dot(s.vel);
+      if (outwardSpeed > 0) {
+        s.vel.addScaledVector(normal, -2 * outwardSpeed);
+        s.mesh.position.x = hit.point.x + hit.binormal.x * (halfWidth - wallMargin) * side;
+        s.mesh.position.z = hit.point.z + hit.binormal.z * (halfWidth - wallMargin) * side;
+        s.wallCooldown = 0.08;
+      }
+    }
+
+    s.vel.y = 0;
+    s.mesh.position.y = hit.point.y + 0.5;
+    s.mesh.position.addScaledVector(s.vel, dt);
+    s.mesh.rotation.x += dt * 10;
+    s.mesh.rotation.z += dt * 7;
+  }
+
   update(dt, karts, audio, track = null) {
     track = this._resolveTrack(track);
 
     for (let i = this.shots.length - 1; i >= 0; i--) {
       const s = this.shots[i];
-      s.life -= dt;
-      s.wallCooldown = Math.max(0, s.wallCooldown - dt);
-
-      const hit = track.project(s.mesh.position);
-      const halfWidth = track.halfWidthAt(hit.t);
-      const wallMargin = 0.08;
-      if (Math.abs(hit.lateral) > halfWidth - wallMargin && s.wallCooldown <= 0) {
-        const side = hit.lateral >= 0 ? 1 : -1;
-        const normal = hit.binormal.clone().multiplyScalar(side);
-        const outwardSpeed = normal.dot(s.vel);
-        if (outwardSpeed > 0) {
-          s.vel.addScaledVector(normal, -2 * outwardSpeed);
-          s.mesh.position.x = hit.point.x + hit.binormal.x * (halfWidth - wallMargin) * side;
-          s.mesh.position.z = hit.point.z + hit.binormal.z * (halfWidth - wallMargin) * side;
-          s.wallCooldown = 0.08;
-        }
-      }
-
-      s.vel.y = 0;
-      s.mesh.position.y = hit.point.y + 0.5;
-      s.mesh.position.addScaledVector(s.vel, dt);
-      s.mesh.rotation.x += dt * 10;
-      s.mesh.rotation.z += dt * 7;
+      this._updateShotPhysics(s, dt, track);
 
       let dead = s.life <= 0;
       for (const k of karts) {
@@ -243,6 +293,43 @@ export class ItemWorld {
       if (dead) {
         this.scene.remove(s.mesh);
         this.shots.splice(i, 1);
+      }
+    }
+
+    for (let i = this.homingShots.length - 1; i >= 0; i--) {
+      const s = this.homingShots[i];
+      s.life -= dt;
+      s.wallCooldown = Math.max(0, s.wallCooldown - dt);
+      const target = s.target && !s.target.finished ? s.target : null;
+
+      if (target) {
+        const desired = new THREE.Vector3(
+          target.pos.x - s.mesh.position.x,
+          0,
+          target.pos.z - s.mesh.position.z
+        );
+        if (desired.lengthSq() > 0.01) {
+          desired.normalize();
+          const current = s.vel.clone().setY(0).normalize();
+          const turn = Math.min(1, 8.5 * dt);
+          current.lerp(desired, turn).normalize();
+          s.vel.set(current.x * 30, 0, current.z * 30);
+        }
+      }
+
+      this._updateShotPhysics(s, dt, track);
+      let dead = s.life <= 0;
+      for (const k of karts) {
+        if (k === s.owner || k.finished) continue;
+        if (k.pos.distanceTo(s.mesh.position) < 1.35) {
+          hitKart(k, audio);
+          dead = true;
+          break;
+        }
+      }
+      if (dead) {
+        this.scene.remove(s.mesh);
+        this.homingShots.splice(i, 1);
       }
     }
 
@@ -313,10 +400,12 @@ export class ItemWorld {
 
   dispose() {
     for (const s of this.shots) this.scene.remove(s.mesh);
+    for (const s of this.homingShots) this.scene.remove(s.mesh);
     for (const t of this.traps) this.scene.remove(t.mesh);
     for (const r of this.rings) this.scene.remove(r.mesh);
     for (const a of this.ants) this.scene.remove(a.mesh);
     this.shots.length = 0;
+    this.homingShots.length = 0;
     this.traps.length = 0;
     this.rings.length = 0;
     this.ants.length = 0;
