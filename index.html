@@ -102,7 +102,10 @@
         <div id="garage-grid" class="char-grid"></div>
         <p id="kit-summary" class="kit-summary"></p>
         <p id="char-desc" class="char-desc"></p>
-        <button id="btn-race" class="btn primary">レース開始</button>
+        <div class="title-row">
+          <button id="btn-race" class="btn primary">レース開始</button>
+          <button id="btn-select-title" type="button" class="btn ghost">タイトルへ戻る</button>
+        </div>
       </section>
 
       <section id="screen-race" class="screen hidden race">
@@ -186,5 +189,10 @@
       </div>
     </div>
     <script type="module" src="/src/main.js"></script>
+    <script type="module">
+      document.getElementById("btn-select-title")?.addEventListener("click", () => {
+        document.getElementById("btn-title")?.click();
+      });
+    </script>
   </body>
 </html>
