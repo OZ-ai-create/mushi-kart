@@ -8,6 +8,9 @@ export const ITEM_DEFS = [
   { id: "silk", name: "クモの糸", icon: "🕸️", weight: 2 },
   { id: "leaf", name: "はっぱ", icon: "🍃", weight: 2 },
   { id: "gust", name: "かぜ", icon: "💨", weight: 1 },
+  { id: "electric", name: "でんき", icon: "⚡", weight: 2 },
+  { id: "mushroom", name: "きのこ", icon: "🍄", weight: 2 },
+  { id: "ants", name: "アリの大群", icon: "🐜", weight: 2 },
 ];
 
 export function rollItem(place) {
@@ -17,6 +20,8 @@ export function rollItem(place) {
     if (place === 1 && it.id === "gust") w = 0;
     if (place >= 3 && it.id === "honey") w += 2;
     if (place === 1 && it.id === "silk") w += 1;
+    if (place === 1 && it.id === "electric") w += 1;
+    if (place >= 3 && it.id === "mushroom") w += 1;
     for (let i = 0; i < w; i++) bag.push(it);
   }
   return bag[Math.floor(Math.random() * bag.length)] ?? ITEM_DEFS[0];
@@ -32,6 +37,7 @@ export class ItemWorld {
     this.shots = [];
     this.traps = [];
     this.rings = [];
+    this.ants = [];
     this.track = null;
     this.trackId = null;
   }
@@ -52,6 +58,12 @@ export class ItemWorld {
       kart.shield = 7;
     } else if (id === "gust") {
       this._gust(kart, karts, audio);
+    } else if (id === "electric") {
+      this._electric(kart, karts, audio);
+    } else if (id === "mushroom") {
+      this._mushroom(kart, audio);
+    } else if (id === "ants") {
+      this._ants(kart);
     }
   }
 
@@ -108,6 +120,68 @@ export class ItemWorld {
     }
   }
 
+  _electric(kart, karts, audio) {
+    let target = null;
+    let best = Infinity;
+    for (const other of karts) {
+      if (other === kart || other.finished) continue;
+      const distance = other.pos.distanceTo(kart.pos);
+      if (distance < 18 && distance < best) {
+        best = distance;
+        target = other;
+      }
+    }
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(0.5, 0.72, 16),
+      new THREE.MeshBasicMaterial({ color: 0xfff06a, transparent: true, opacity: 0.9, side: THREE.DoubleSide })
+    );
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.copy(kart.pos);
+    ring.position.y += 0.22;
+    this.scene.add(ring);
+    this.rings.push({ mesh: ring, life: 0.7 });
+    if (target) {
+      if (target.shield > 0) target.shield = 0;
+      else {
+        target.stun = Math.max(target.stun, 1.0);
+        target.speed *= 0.3;
+        target.hitFlash = 0.75;
+        target.boost = 0;
+        audio?.hit();
+        if (target.isPlayer && navigator.vibrate) navigator.vibrate([25, 35, 25]);
+      }
+    }
+  }
+
+  _mushroom(kart, audio) {
+    kart.boost = Math.max(kart.boost, 2.5);
+    audio?.boost();
+  }
+
+  _ants(kart) {
+    const forward = new THREE.Vector3(Math.sin(kart.yaw), 0, Math.cos(kart.yaw));
+    const right = new THREE.Vector3(forward.z, 0, -forward.x);
+    for (let i = 0; i < 5; i++) {
+      const mesh = new THREE.Group();
+      const body = new THREE.Mesh(
+        new THREE.SphereGeometry(0.18, 7, 5),
+        new THREE.MeshLambertMaterial({ color: 0x2a211c })
+      );
+      const head = new THREE.Mesh(
+        new THREE.SphereGeometry(0.12, 7, 5),
+        new THREE.MeshLambertMaterial({ color: 0x171310 })
+      );
+      head.position.z = 0.16;
+      mesh.add(body, head);
+      const laneOffset = (i - 2) * 0.48;
+      const forwardOffset = 2.8 + (i % 2) * 0.7;
+      mesh.position.copy(kart.pos).addScaledVector(forward, forwardOffset).addScaledVector(right, laneOffset);
+      mesh.position.y = kart.pos.y + 0.18;
+      this.scene.add(mesh);
+      this.ants.push({ mesh, life: 6, owner: kart, drift: (i - 2) * 0.08 });
+    }
+  }
+
   _resolveTrack(track) {
     if (track) return track;
 
@@ -136,14 +210,12 @@ export class ItemWorld {
       s.life -= dt;
       s.wallCooldown = Math.max(0, s.wallCooldown - dt);
 
-      // Green-shell-like projectiles stay on the track surface and bounce off the walls.
       const hit = track.project(s.mesh.position);
       const halfWidth = track.halfWidthAt(hit.t);
       const wallMargin = 0.08;
       if (Math.abs(hit.lateral) > halfWidth - wallMargin && s.wallCooldown <= 0) {
         const side = hit.lateral >= 0 ? 1 : -1;
         const normal = hit.binormal.clone().multiplyScalar(side);
-        // Track binormals point toward the outside wall. Reflect only when moving outward.
         const outwardSpeed = normal.dot(s.vel);
         if (outwardSpeed > 0) {
           s.vel.addScaledVector(normal, -2 * outwardSpeed);
@@ -153,7 +225,6 @@ export class ItemWorld {
         }
       }
 
-      // Keep the projectile on the road instead of letting gravity pull it into the course/ground.
       s.vel.y = 0;
       s.mesh.position.y = hit.point.y + 0.5;
       s.mesh.position.addScaledVector(s.vel, dt);
@@ -201,6 +272,33 @@ export class ItemWorld {
       }
     }
 
+    for (let i = this.ants.length - 1; i >= 0; i--) {
+      const ant = this.ants[i];
+      ant.life -= dt;
+      ant.mesh.position.y += Math.sin((6 - ant.life) * 8 + ant.drift * 10) * dt * 0.03;
+      ant.mesh.position.x += Math.sin((6 - ant.life) * 1.5 + ant.drift) * dt * ant.drift;
+      ant.mesh.position.z += Math.cos((6 - ant.life) * 1.3 + ant.drift) * dt * ant.drift;
+      let dead = ant.life <= 0;
+      for (const k of karts) {
+        if (k === ant.owner || k.finished) continue;
+        if (k.pos.distanceTo(ant.mesh.position) < 1.0) {
+          if (k.shield > 0) k.shield = 0;
+          else {
+            k.speed *= 0.38;
+            k.stun = Math.max(k.stun, 0.55);
+            k.hitFlash = 0.45;
+            k.boost = 0;
+          }
+          dead = true;
+          break;
+        }
+      }
+      if (dead) {
+        this.scene.remove(ant.mesh);
+        this.ants.splice(i, 1);
+      }
+    }
+
     for (let i = this.rings.length - 1; i >= 0; i--) {
       const r = this.rings[i];
       r.life -= dt;
@@ -217,9 +315,11 @@ export class ItemWorld {
     for (const s of this.shots) this.scene.remove(s.mesh);
     for (const t of this.traps) this.scene.remove(t.mesh);
     for (const r of this.rings) this.scene.remove(r.mesh);
+    for (const a of this.ants) this.scene.remove(a.mesh);
     this.shots.length = 0;
     this.traps.length = 0;
     this.rings.length = 0;
+    this.ants.length = 0;
     this.track = null;
     this.trackId = null;
   }
