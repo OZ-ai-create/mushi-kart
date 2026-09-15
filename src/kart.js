@@ -6,6 +6,10 @@ function wrapPi(a) {
   return a;
 }
 
+// Acceleration is expressed as "how quickly this kart reaches its current cap".
+// Higher accel stat => shorter time from 0 to top speed.
+const ACCEL_TIME_REFERENCE = 30;
+
 export class Kart {
   constructor({ stats, mesh, isPlayer, name }) {
     this.stats = stats;
@@ -140,8 +144,15 @@ export class Kart {
     const hillMul = slope > 0.14 ? 0.86 : slope < -0.12 ? 1.1 : 1;
 
     if (!this.finished) {
-      if (input.brake) this.speed -= 34 * dt;
-      else this.speed += this.stats.accel * (boosting ? 1.35 : 1) * dt;
+      if (input.brake) {
+        this.speed -= 34 * dt;
+      } else {
+        // Convert the acceleration stat into a target time-to-top-speed.
+        // This makes the stat relationship explicit: larger accel = less time.
+        const accelTime = ACCEL_TIME_REFERENCE / Math.max(1, this.stats.accel);
+        const accelRate = cap / accelTime;
+        this.speed += accelRate * (boosting ? 1.35 : 1) * dt;
+      }
       this.speed += -slope * 28 * dt;
     } else {
       this.speed -= 18 * dt;
@@ -186,7 +197,6 @@ export class Kart {
     }
     this.lateral = lat;
     this.snapToTrack(track);
-
 
     if (!this.finished) {
       if (this.t > 0.42 && this.t < 0.72) this._passedMid = true;
