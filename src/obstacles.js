@@ -1,17 +1,18 @@
 import * as THREE from "three";
 import { hitKart } from "./items.js";
+import { std } from "./gfx.js";
 
 function mat(color, extras = {}) {
-  return new THREE.MeshLambertMaterial({ color, ...extras });
+  return std(color, extras);
 }
 
 function glow(color, emissive, intensity = 0.4) {
-  return new THREE.MeshLambertMaterial({ color, emissive, emissiveIntensity: intensity });
+  return std(color, { emissive, emissiveIntensity: intensity, roughness: 0.42, metalness: 0.08 });
 }
 
 function addHalo(g, color) {
   const halo = new THREE.Mesh(
-    new THREE.CircleGeometry(1.35, 18),
+    new THREE.CircleGeometry(1.35, 28),
     new THREE.MeshBasicMaterial({
       color,
       transparent: true,
@@ -30,14 +31,14 @@ function addHalo(g, color) {
 
 function makeBird({ plumage = 0xe63946, belly = 0xfff3c4, wingColor = 0xffd166 } = {}) {
   const g = new THREE.Group();
-  const body = new THREE.Mesh(new THREE.SphereGeometry(0.58, 12, 10), glow(plumage, 0x661122, 0.35));
+  const body = new THREE.Mesh(new THREE.SphereGeometry(0.58, 18, 14), glow(plumage, 0x661122, 0.35));
   body.scale.set(1.2, 0.88, 1.5);
   g.add(body);
-  const tum = new THREE.Mesh(new THREE.SphereGeometry(0.4, 10, 8), glow(belly, 0x886622, 0.22));
+  const tum = new THREE.Mesh(new THREE.SphereGeometry(0.4, 14, 12), glow(belly, 0x886622, 0.22));
   tum.position.set(0, -0.14, 0.1);
   tum.scale.set(1.05, 0.72, 1.25);
   g.add(tum);
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.34, 10, 8), glow(plumage, 0x661122, 0.35));
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.34, 14, 12), glow(plumage, 0x661122, 0.35));
   head.position.set(0, 0.22, 0.68);
   g.add(head);
   const beak = new THREE.Mesh(new THREE.ConeGeometry(0.11, 0.38, 6), glow(0xff9f1c, 0xff6600, 0.7));
@@ -45,7 +46,7 @@ function makeBird({ plumage = 0xe63946, belly = 0xfff3c4, wingColor = 0xffd166 }
   beak.position.set(0, 0.14, 1.02);
   g.add(beak);
   for (const s of [-1, 1]) {
-    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 6), mat(0xffffff));
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.1, 12, 10), mat(0xffffff, { roughness: 0.28 }));
     eye.position.set(s * 0.18, 0.3, 0.9);
     g.add(eye);
     const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.05, 6, 5), mat(0x140c08));
@@ -54,7 +55,7 @@ function makeBird({ plumage = 0xe63946, belly = 0xfff3c4, wingColor = 0xffd166 }
   }
   const wings = [];
   for (const s of [-1, 1]) {
-    const geo = new THREE.BoxGeometry(1.55, 0.08, 0.62);
+    const geo = new THREE.BoxGeometry(1.55, 0.08, 0.62, 2, 1, 2);
     geo.translate(s * 0.72, 0, 0);
     const wing = new THREE.Mesh(geo, glow(wingColor, 0xaa5500, 0.45));
     wing.position.set(s * 0.18, 0.16, 0.05);
@@ -73,7 +74,7 @@ function makeBird({ plumage = 0xe63946, belly = 0xfff3c4, wingColor = 0xffd166 }
 
 function makeFish({ body = 0xffe66d, fin = 0xff6b35, stripe = 0x00bbf9 } = {}) {
   const g = new THREE.Group();
-  const torso = new THREE.Mesh(new THREE.SphereGeometry(0.55, 12, 10), glow(body, 0x886600, 0.45));
+  const torso = new THREE.Mesh(new THREE.SphereGeometry(0.55, 18, 14), glow(body, 0x886600, 0.45));
   torso.scale.set(0.9, 0.95, 1.85);
   g.add(torso);
   const band = new THREE.Mesh(new THREE.TorusGeometry(0.46, 0.09, 6, 14), glow(stripe, 0x006688, 0.55));
@@ -115,7 +116,7 @@ function makeFlame() {
   ];
   for (const L of layers) {
     const m = new THREE.Mesh(
-      new THREE.ConeGeometry(L.r, L.h, 8),
+      new THREE.ConeGeometry(L.r, L.h, 14),
       glow(L.c, L.e, 0.95)
     );
     m.position.y = L.y;
@@ -123,7 +124,7 @@ function makeFlame() {
     cones.push(m);
   }
   const core = new THREE.Mesh(
-    new THREE.SphereGeometry(0.32, 10, 8),
+    new THREE.SphereGeometry(0.32, 14, 12),
     new THREE.MeshBasicMaterial({ color: 0xfff6c8 })
   );
   core.position.y = 0.28;
@@ -200,6 +201,9 @@ export function createObstacles(scene, track, courseId) {
   const list = [];
   for (const def of layout) {
     const mesh = (MAKERS[def.kind] ?? makeFlame)();
+    mesh.traverse((o) => {
+      if (o.isMesh && !o.userData.halo) o.castShadow = true;
+    });
     scene.add(mesh);
     list.push({
       ...def,
@@ -239,7 +243,7 @@ export function createObstacles(scene, track, courseId) {
         animateEnemy(o, dt);
         if (!collide) continue;
         for (const k of karts) {
-          if (k.finished || o.hitCD > 0) continue;
+          if (k.finished || o.hitCD > 0 || k.ramT > 0 || k.ghostT > 0 || k.leapT > 0) continue;
           const dx = k.pos.x - o.mesh.position.x;
           const dz = k.pos.z - o.mesh.position.z;
           if (dx * dx + dz * dz < o.radius * o.radius) {

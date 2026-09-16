@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { Track } from "./track.js";
 import { getCourse } from "./courses.js";
+import { std } from "./gfx.js";
 
 export const ITEM_DEFS = [
   { id: "honey", name: "ハチミツ", icon: "🍯", weight: 3 },
@@ -41,6 +42,7 @@ export class ItemWorld {
     this.traps = [];
     this.rings = [];
     this.ants = [];
+    this.slicks = [];
     this.track = null;
     this.trackId = null;
   }
@@ -72,14 +74,43 @@ export class ItemWorld {
     }
   }
 
+  honeyTrail(kart) {
+    for (const back of [1.8, 3.4, 5.0]) {
+      const mesh = new THREE.Mesh(
+        new THREE.CircleGeometry(1.15, 20),
+        std(0xf4d35e, { transparent: true, opacity: 0.72, side: THREE.DoubleSide, roughness: 0.35, emissive: 0x886600, emissiveIntensity: 0.25 })
+      );
+      mesh.rotation.x = -Math.PI / 2;
+      mesh.position.copy(kart.pos);
+      mesh.position.x -= Math.sin(kart.yaw) * back;
+      mesh.position.z -= Math.cos(kart.yaw) * back;
+      mesh.position.y += 0.07;
+      this.scene.add(mesh);
+      this.slicks.push({ mesh, life: 7.5, owner: kart, hit: new Set() });
+    }
+    this.burst(kart, 0xffe066);
+  }
+
+  burst(kart, color = 0xff9f1c) {
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(0.4, 0.85, 28),
+      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.85, side: THREE.DoubleSide })
+    );
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.copy(kart.pos);
+    ring.position.y += 0.22;
+    this.scene.add(ring);
+    this.rings.push({ mesh: ring, life: 0.45 });
+  }
+
   _acorn(kart) {
     const mesh = new THREE.Mesh(
-      new THREE.SphereGeometry(0.28, 10, 8),
-      new THREE.MeshLambertMaterial({ color: 0x8b5a2b })
+      new THREE.SphereGeometry(0.28, 16, 14),
+      std(0x8b5a2b, { roughness: 0.62 })
     );
     const cap = new THREE.Mesh(
-      new THREE.SphereGeometry(0.18, 8, 6),
-      new THREE.MeshLambertMaterial({ color: 0x5c4030 })
+      new THREE.SphereGeometry(0.18, 12, 10),
+      std(0x5c4030, { roughness: 0.75 })
     );
     cap.position.y = 0.16;
     mesh.add(cap);
@@ -140,8 +171,8 @@ export class ItemWorld {
 
   _silk(kart) {
     const mesh = new THREE.Mesh(
-      new THREE.CircleGeometry(0.9, 10),
-      new THREE.MeshLambertMaterial({ color: 0xeaf6ff, transparent: true, opacity: 0.8, side: THREE.DoubleSide })
+      new THREE.CircleGeometry(0.9, 24),
+      std(0xeaf6ff, { transparent: true, opacity: 0.8, side: THREE.DoubleSide, roughness: 0.3 })
     );
     mesh.rotation.x = -Math.PI / 2;
     mesh.position.copy(kart.pos);
@@ -154,7 +185,7 @@ export class ItemWorld {
 
   _gust(kart, karts, audio) {
     const ring = new THREE.Mesh(
-      new THREE.RingGeometry(0.4, 0.7, 20),
+      new THREE.RingGeometry(0.4, 0.7, 32),
       new THREE.MeshBasicMaterial({ color: 0xd8f0ff, transparent: true, opacity: 0.8, side: THREE.DoubleSide })
     );
     ring.rotation.x = -Math.PI / 2;
@@ -396,6 +427,29 @@ export class ItemWorld {
         this.rings.splice(i, 1);
       }
     }
+
+    for (let i = this.slicks.length - 1; i >= 0; i--) {
+      const sl = this.slicks[i];
+      sl.life -= dt;
+      sl.mesh.rotation.z += dt * 0.6;
+      sl.mesh.material.opacity = Math.max(0.12, Math.min(0.72, sl.life / 7.5));
+      for (const k of karts) {
+        if (k === sl.owner || k.finished || sl.hit.has(k)) continue;
+        if (k.ghostT > 0 || k.ramT > 0 || k.leapT > 0) continue;
+        const dx = k.pos.x - sl.mesh.position.x;
+        const dz = k.pos.z - sl.mesh.position.z;
+        if (dx * dx + dz * dz < 1.45) {
+          sl.hit.add(k);
+          k.speed *= 0.42;
+          k.boost = 0;
+          audio?.hit();
+        }
+      }
+      if (sl.life <= 0) {
+        this.scene.remove(sl.mesh);
+        this.slicks.splice(i, 1);
+      }
+    }
   }
 
   dispose() {
@@ -404,17 +458,20 @@ export class ItemWorld {
     for (const t of this.traps) this.scene.remove(t.mesh);
     for (const r of this.rings) this.scene.remove(r.mesh);
     for (const a of this.ants) this.scene.remove(a.mesh);
+    for (const s of this.slicks) this.scene.remove(s.mesh);
     this.shots.length = 0;
     this.homingShots.length = 0;
     this.traps.length = 0;
     this.rings.length = 0;
     this.ants.length = 0;
+    this.slicks.length = 0;
     this.track = null;
     this.trackId = null;
   }
 }
 
 export function hitKart(kart, audio) {
+  if (kart.ramT > 0 || kart.ghostT > 0 || kart.leapT > 0) return;
   if (kart.shield > 0) {
     kart.shield = 0;
     return;

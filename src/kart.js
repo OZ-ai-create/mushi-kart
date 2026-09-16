@@ -47,6 +47,14 @@ export class Kart {
     this._passedMid = false;
     this.hitFlash = 0;
     this.lastPos = new THREE.Vector3();
+    this._pitch = 0;
+    this.specialUsed = false;
+    this.ramT = 0;
+    this.ghostT = 0;
+    this.luckyT = 0;
+    this.leapT = 0;
+    this.leapMax = 0;
+    this._ramHit = null;
   }
 
   spawn(track, t, lateral) {
@@ -65,6 +73,14 @@ export class Kart {
     this.driftTurboGiven = false;
     this.item = null;
     this.roulette = 0;
+    this._pitch = 0;
+    this.specialUsed = false;
+    this.ramT = 0;
+    this.ghostT = 0;
+    this.luckyT = 0;
+    this.leapT = 0;
+    this.leapMax = 0;
+    this._ramHit = null;
     this.mesh.position.copy(this.pos);
     this.mesh.rotation.set(0, this.yaw, 0);
   }
@@ -78,28 +94,41 @@ export class Kart {
     const f = track.at(this.t);
     const wall = track.halfWidthAt(this.t) + 0.28;
     this.lateral = THREE.MathUtils.clamp(this.lateral, -wall, wall);
-    const hopY = Math.sin(Math.max(0, this.hop) * Math.PI) * 0.5;
+    const hopY = Math.sin(Math.max(0, this.hop) * Math.PI) * (this.leapT > 0 ? 2.35 : 0.5);
     this.pos.copy(f.point).addScaledVector(f.binormal, this.lateral);
     this.pos.y = f.point.y + 0.08 + hopY;
   }
 
   update(dt, input, track) {
     this.lastPos.copy(this.pos);
+    this.wantsBoostSfx = false;
     if (this.hitFlash > 0) this.hitFlash -= dt;
     if (this.shield > 0) this.shield -= dt;
     if (this.boost > 0) this.boost -= dt;
-    if (this.hop > 0) this.hop -= dt * 3.6;
-    this.wantsBoostSfx = false;
+    if (this.ramT > 0) this.ramT -= dt;
+    if (this.ghostT > 0) this.ghostT -= dt;
+    if (this.luckyT > 0) this.luckyT -= dt;
+    if (this.leapT > 0) {
+      this.leapT -= dt;
+      this.hop = Math.max(this.hop, this.leapT / Math.max(0.01, this.leapMax));
+      if (this.leapT <= 0) {
+        this.boost = Math.max(this.boost, 0.9);
+        this.wantsBoostSfx = true;
+      }
+    }
+    if (this.hop > 0) this.hop -= dt * (this.leapT > 0 ? 0.9 : 3.6);
 
     if (this.roulette > 0) {
       this.roulette -= dt;
       if (this.roulette <= 0) this.rouletteShow = null;
     }
 
-    if (this.stun > 0) {
+    if (this.stun > 0 && this.ramT <= 0) {
       this.stun -= dt;
       this.speed *= Math.pow(0.08, dt);
       input = { steer: Math.sin(this.stun * 18) * 0.35, drift: false, brake: false };
+    } else if (this.stun > 0) {
+      this.stun -= dt;
     }
 
     let steer = input.steer;
@@ -160,7 +189,7 @@ export class Kart {
     this.speed = THREE.MathUtils.clamp(this.speed, input.brake ? -7 : 0, cap * hillMul);
 
     const grip = THREE.MathUtils.clamp(Math.abs(this.speed) / 10, 0.18, 1);
-    const rate = this.stats.handling * (this.drifting ? 1.12 : 1.82);
+    const rate = this.stats.handling * (this.drifting ? 1.12 : 1.82) * (this.luckyT > 0 ? 1.72 : 1);
     this.yaw += -steer * rate * grip * dt;
     this.steerVis = THREE.MathUtils.damp(this.steerVis, steer, 12, dt);
 
@@ -189,6 +218,8 @@ export class Kart {
       lat += (lane - lat) * Math.min(1, 5.5 * dt);
     }
 
+    if (this.luckyT > 0) lat += -lat * Math.min(1, 5.2 * dt);
+
     const wall = hw + 0.28;
     if (Math.abs(lat) > wall) {
       lat = Math.sign(lat) * wall;
@@ -213,12 +244,18 @@ export class Kart {
     this.mesh.rotation.y = this.yaw;
     const roll = -this.steerVis * 0.16 - (this.drifting ? this.driftDir * 0.2 : 0);
     this.mesh.rotation.z = roll;
-    this.mesh.rotation.x = this.offroad ? Math.sin(performance.now() * 0.03) * 0.04 : 0;
+    const ahead = track.at(this.t + 0.01);
+    const here = track.at(this.t);
+    const horiz = Math.hypot(ahead.point.x - here.point.x, ahead.point.z - here.point.z) || 1e-3;
+    const wantPitch = -Math.atan2(ahead.point.y - here.point.y, horiz);
+    this._pitch = THREE.MathUtils.damp(this._pitch, wantPitch, 9, dt);
+    this.mesh.rotation.x = this._pitch + (this.offroad ? Math.sin(performance.now() * 0.03) * 0.04 : 0);
     this.mesh.userData.update?.(dt, {
       speed: this.speed,
       steer: this.steerVis,
-      boost: boosting,
-      shield: this.shield > 0,
+      boost: boosting || this.ramT > 0,
+      shield: this.shield > 0 || this.ghostT > 0,
+      ram: this.ramT > 0,
     });
     if (this.hitFlash > 0) this.mesh.visible = Math.sin(this.hitFlash * 40) > 0;
     else this.mesh.visible = true;
@@ -263,6 +300,7 @@ export function aiInput(kart, track, rivals = [], obstacles = []) {
 }
 
 export function bumpKarts(a, b) {
+  if (a.ramT > 0 || b.ramT > 0 || a.ghostT > 0 || b.ghostT > 0 || a.leapT > 0 || b.leapT > 0) return;
   const dx = a.pos.x - b.pos.x;
   const dz = a.pos.z - b.pos.z;
   const d2 = dx * dx + dz * dz;

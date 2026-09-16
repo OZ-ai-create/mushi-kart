@@ -4,15 +4,12 @@
 
 任天堂のキャラや名称は使っていません。
 
-## iPhoneで遊ぶ
+## 公開URL
 
-1. パソコンで `npm install` したあと `npm run dev` を起動する
-2. パソコンとiPhoneを同じWi-Fiにする
-3. ターミナルに出る `Network` のURL（例: `http://192.168.0.12:5173/`）をiPhoneのSafariで開く
-4. タイトル画面のQRコードを読み取っても同じです
-5. Safariの共有 → **ホーム画面に追加** すると全画面で遊べます
+- ゲーム: https://oz-ai-create.github.io/mushi-kart/
+- ソース: https://github.com/OZ-ai-create/mushi-kart
 
-カートは自動で走ります。左を指で左右にスライドして曲がり、ドリフトを押しながら曲がってはなすと加速します。
+Safariで開いて、共有 → **ホーム画面に追加** すると全画面で遊べます。公開URLはHTTPSなので、傾けてハンドルも使えます。
 
 ## 開発
 

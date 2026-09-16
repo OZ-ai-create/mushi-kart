@@ -5,6 +5,7 @@ export class Input {
     this.brake = false;
     this.gyroOn = false;
     this._itemQueued = false;
+    this._specialQueued = false;
     this._touchSteer = 0;
     this._gyroSteer = 0;
     this._orientDeg = null;
@@ -28,7 +29,7 @@ export class Input {
     window.addEventListener("deviceorientationabsolute", this._onOrientBound);
   }
 
-  attach({ steerZone, knob, driftBtn, itemBtn, brakeBtn }) {
+  attach({ steerZone, knob, driftBtn, itemBtn, brakeBtn, specialBtn }) {
     this.knob = knob;
 
     const setHeld = (btn, on) => btn.classList.toggle("held", on);
@@ -98,6 +99,16 @@ export class Input {
     itemBtn.addEventListener("pointerup", () => setHeld(itemBtn, false));
     itemBtn.addEventListener("pointercancel", () => setHeld(itemBtn, false));
 
+    if (specialBtn) {
+      specialBtn.addEventListener("pointerdown", (e) => {
+        e.preventDefault();
+        this._specialQueued = true;
+        setHeld(specialBtn, true);
+      });
+      specialBtn.addEventListener("pointerup", () => setHeld(specialBtn, false));
+      specialBtn.addEventListener("pointercancel", () => setHeld(specialBtn, false));
+    }
+
     this._keys = { left: false, right: false };
     window.addEventListener("keydown", (e) => {
       if (e.repeat) return;
@@ -108,6 +119,10 @@ export class Input {
       if (e.code === "Space") {
         e.preventDefault();
         this._itemQueued = true;
+      }
+      if (e.code === "KeyE") {
+        e.preventDefault();
+        this._specialQueued = true;
       }
     });
     window.addEventListener("keyup", (e) => {
@@ -210,6 +225,12 @@ export class Input {
   consumeItem() {
     if (!this._itemQueued) return false;
     this._itemQueued = false;
+    return true;
+  }
+
+  consumeSpecial() {
+    if (!this._specialQueued) return false;
+    this._specialQueued = false;
     return true;
   }
 

@@ -6,6 +6,7 @@ import { Input } from "./controls.js";
 import { Game } from "./game.js";
 import { BODIES, TIRES, buildLoadout, loadGarage, saveGarage, loadLastRun, saveLastRun, statBars, getBody, getTire } from "./garage.js";
 import { COURSES, getCourse } from "./courses.js";
+import { getSpecial } from "./specials.js";
 
 const $ = (id) => document.getElementById(id);
 const screens = {
@@ -28,6 +29,7 @@ input.attach({
   knob: $("steer-knob"),
   driftBtn: $("btn-drift"),
   itemBtn: $("btn-item"),
+  specialBtn: $("btn-special"),
   brakeBtn: $("btn-brake"),
 });
 
@@ -526,6 +528,13 @@ function startRace() {
   $("race-banner").textContent = "";
   $("countdown").textContent = "";
   $("enemy-warn").classList.add("hidden");
+  const spec = getSpecial(selected);
+  $("special-icon").textContent = spec.icon;
+  $("special-name").textContent = spec.name;
+  $("special-slot").classList.remove("spent");
+  $("btn-special").innerHTML = `必殺<small>${spec.name}</small>`;
+  $("btn-special").classList.remove("spent");
+  $("btn-special").disabled = false;
   show("race");
   game.resize();
   try {
@@ -552,6 +561,16 @@ function drawHud(h) {
   const best = courseRec(loadRecords()).time?.time;
   $("hud-best").textContent = h.mode === "time" && best ? `ベスト ${fmt(best)}` : "";
   $("item-icon").textContent = h.itemIcon;
+  const spec = h.special;
+  if (spec) {
+    $("special-icon").textContent = spec.icon;
+    $("special-name").textContent = spec.ready ? spec.name : "使用済";
+    $("special-slot").classList.toggle("spent", !spec.ready);
+    const btn = $("btn-special");
+    btn.innerHTML = spec.ready ? `必殺<small>${spec.name}</small>` : `必殺<small>使用済</small>`;
+    btn.classList.toggle("spent", !spec.ready);
+    btn.disabled = !spec.ready;
+  }
   const warn = $("enemy-warn");
   if (h.threat?.label) {
     warn.textContent = h.threat.label;

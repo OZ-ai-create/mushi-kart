@@ -1,6 +1,9 @@
 import * as THREE from "three";
 import { getCourse } from "./courses.js";
 import { createObstacles } from "./obstacles.js";
+import { std } from "./gfx.js";
+
+const CAST_ENV = !/iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
 const UP = new THREE.Vector3(0, 1, 0);
 
@@ -155,7 +158,7 @@ function roadGeometry(track) {
     nrm.push(0, 1, 0, 0, 1, 0);
     const narrow = hw < track.halfWidth * 0.78;
     c.set(narrow ? track.course.roadB : track.course.roadA);
-    col.push(c.r, c.g, c.b, c.r * 0.9, c.g * 0.88, c.b * 0.85);
+    col.push(c.r, c.g, c.b, c.r * 0.92, c.g * 0.9, c.b * 0.88);
     uv.push(0, t * 18, 1, t * 18);
     if (i < segs) {
       const a = i * 2;
@@ -168,6 +171,7 @@ function roadGeometry(track) {
   g.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
   g.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
   g.setIndex(idx);
+  g.computeVertexNormals();
   return g;
 }
 
@@ -202,6 +206,7 @@ function curbGeometry(track, side) {
   g.setAttribute("normal", new THREE.Float32BufferAttribute(nrm, 3));
   g.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
   g.setIndex(idx);
+  g.computeVertexNormals();
   return g;
 }
 
@@ -248,7 +253,7 @@ function bannerTexture() {
 }
 
 function skyDome(course) {
-  const geo = new THREE.SphereGeometry(300, 24, 16);
+  const geo = new THREE.SphereGeometry(300, 32, 24);
   const [tr, tg, tb] = course.skyTop;
   const [hr, hg, hb] = course.skyHor;
   const [gr, gg, gb] = course.skyGnd;
@@ -284,79 +289,105 @@ export function buildWorld(scene, track) {
   scene.add(skyDome(course));
 
   const ground = new THREE.Mesh(
-    new THREE.CircleGeometry(220, 48),
-    new THREE.MeshLambertMaterial({ color: course.ground })
+    new THREE.CircleGeometry(220, 72),
+    std(course.ground, { roughness: 0.92, metalness: 0 })
   );
   ground.rotation.x = -Math.PI / 2;
+  ground.receiveShadow = true;
   scene.add(ground);
 
   const dirt = new THREE.Mesh(
-    new THREE.CircleGeometry(18, 28),
-    new THREE.MeshLambertMaterial({ color: course.dirt })
+    new THREE.CircleGeometry(18, 40),
+    std(course.dirt, { roughness: 0.88, metalness: 0 })
   );
   dirt.rotation.x = -Math.PI / 2;
   dirt.position.y = 0.02;
+  dirt.receiveShadow = true;
   scene.add(dirt);
 
   if (course.id === "volcano") {
     const lava = new THREE.Mesh(
-      new THREE.CircleGeometry(12.5, 32),
-      new THREE.MeshLambertMaterial({ color: 0xff6a2a, emissive: 0xbb3300, emissiveIntensity: 0.55 })
+      new THREE.CircleGeometry(12.5, 48),
+      std(0xff6a2a, { roughness: 0.35, metalness: 0.08, emissive: 0xbb3300, emissiveIntensity: 0.7 })
     );
     lava.rotation.x = -Math.PI / 2;
     lava.position.y = 0.06;
+    lava.receiveShadow = true;
     scene.add(lava);
     const rim = new THREE.Mesh(
-      new THREE.RingGeometry(12.5, 14.4, 32),
-      new THREE.MeshLambertMaterial({ color: 0x2a1512 })
+      new THREE.RingGeometry(12.5, 14.4, 48),
+      std(0x2a1512, { roughness: 0.9 })
     );
     rim.rotation.x = -Math.PI / 2;
     rim.position.y = 0.07;
+    rim.receiveShadow = true;
     scene.add(rim);
   } else {
     const water = new THREE.Mesh(
-      new THREE.CircleGeometry(course.id === "sea" ? 16 : 11.5, 32),
-      new THREE.MeshLambertMaterial({ color: course.id === "sea" ? 0x3a9fd0 : 0x4aa3b8 })
+      new THREE.CircleGeometry(course.id === "sea" ? 16 : 11.5, 48),
+      std(course.id === "sea" ? 0x3a9fd0 : 0x4aa3b8, { roughness: 0.16, metalness: 0.28 })
     );
     water.rotation.x = -Math.PI / 2;
     water.position.y = 0.06;
+    water.receiveShadow = true;
     scene.add(water);
     const shore = new THREE.Mesh(
-      new THREE.RingGeometry(course.id === "sea" ? 16 : 11.5, course.id === "sea" ? 18.2 : 13.2, 32),
-      new THREE.MeshLambertMaterial({ color: 0xd8c39a })
+      new THREE.RingGeometry(course.id === "sea" ? 16 : 11.5, course.id === "sea" ? 18.2 : 13.2, 48),
+      std(0xd8c39a, { roughness: 0.86 })
     );
     shore.rotation.x = -Math.PI / 2;
     shore.position.y = 0.07;
+    shore.receiveShadow = true;
     scene.add(shore);
   }
 
   const road = new THREE.Mesh(
     roadGeometry(track),
-    new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide, emissive: 0x4a3518, emissiveIntensity: 0.18 })
+    std(0xffffff, {
+      vertexColors: true,
+      side: THREE.DoubleSide,
+      roughness: 0.74,
+      metalness: 0.03,
+      emissive: 0x4a3518,
+      emissiveIntensity: 0.06,
+    })
   );
+  road.receiveShadow = true;
   scene.add(road);
-  const curbM = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
-  scene.add(new THREE.Mesh(curbGeometry(track, 1), curbM));
-  scene.add(new THREE.Mesh(curbGeometry(track, -1), curbM.clone()));
+  const curbM = std(0xffffff, { vertexColors: true, side: THREE.DoubleSide, roughness: 0.5, metalness: 0.04 });
+  const curbL = new THREE.Mesh(curbGeometry(track, 1), curbM);
+  const curbR = new THREE.Mesh(curbGeometry(track, -1), curbM.clone());
+  curbL.receiveShadow = true;
+  curbR.receiveShadow = true;
+  scene.add(curbL);
+  scene.add(curbR);
 
-  const hedgeM = new THREE.MeshLambertMaterial({ color: course.hedge, side: THREE.DoubleSide });
-  scene.add(new THREE.Mesh(hedgeGeometry(track, 1), hedgeM));
-  scene.add(new THREE.Mesh(hedgeGeometry(track, -1), hedgeM.clone()));
+  const hedgeM = std(course.hedge, { side: THREE.DoubleSide, roughness: 0.82 });
+  const hedgeL = new THREE.Mesh(hedgeGeometry(track, 1), hedgeM);
+  const hedgeR = new THREE.Mesh(hedgeGeometry(track, -1), hedgeM.clone());
+  hedgeL.castShadow = CAST_ENV;
+  hedgeR.castShadow = CAST_ENV;
+  hedgeL.receiveShadow = true;
+  hedgeR.receiveShadow = true;
+  scene.add(hedgeL);
+  scene.add(hedgeR);
 
   const start = track.at(0);
   const hw0 = track.halfWidthAt(0);
-  const postGeo = new THREE.CylinderGeometry(0.16, 0.2, 3.2, 8);
-  const postM = new THREE.MeshLambertMaterial({ color: 0x8b5a2b });
+  const postGeo = new THREE.CylinderGeometry(0.16, 0.2, 3.2, 12);
+  const postM = std(0x8b5a2b, { roughness: 0.7 });
   for (const s of [-1, 1]) {
     const post = new THREE.Mesh(postGeo, postM);
     const p = start.point.clone().addScaledVector(start.binormal, s * (hw0 + 0.6));
     post.position.copy(p);
     post.position.y += 1.5;
+    post.castShadow = true;
+    post.receiveShadow = true;
     scene.add(post);
   }
   const cloth = new THREE.Mesh(
     new THREE.PlaneGeometry(hw0 * 2 + 1.4, 0.9),
-    new THREE.MeshLambertMaterial({ map: bannerTexture(), side: THREE.DoubleSide })
+    std(0xffffff, { map: bannerTexture(), side: THREE.DoubleSide, roughness: 0.7 })
   );
   cloth.position.copy(start.point).addScaledVector(start.normal, 3.05);
   cloth.lookAt(start.point.clone().addScaledVector(start.tangent, -1).addScaledVector(start.normal, 3.05));
@@ -364,10 +395,11 @@ export function buildWorld(scene, track) {
 
   const line = new THREE.Mesh(
     new THREE.PlaneGeometry(hw0 * 2 - 0.4, 0.7),
-    new THREE.MeshLambertMaterial({ color: 0xf4f0e0, transparent: true, opacity: 0.85 })
+    std(0xf4f0e0, { transparent: true, opacity: 0.9, roughness: 0.45 })
   );
   line.position.set(start.point.x, start.point.y + 0.2, start.point.z);
   line.rotation.x = -Math.PI / 2;
+  line.receiveShadow = true;
   scene.add(line);
 
   if (course.id === "sea") scatterSea(scene, track);
@@ -389,13 +421,16 @@ function occupied(track, x, z) {
 }
 
 function scatterGarden(scene, track) {
-  const trunkGeo = new THREE.CylinderGeometry(0.18, 0.28, 1.4, 6);
-  const leafGeo = new THREE.ConeGeometry(1.15, 2.1, 8);
-  const trunkM = new THREE.MeshLambertMaterial({ color: 0x6b4423 });
-  const leafM = new THREE.MeshLambertMaterial({ color: 0x3d8c3a });
+  const trunkGeo = new THREE.CylinderGeometry(0.18, 0.28, 1.4, 10);
+  const leafGeo = new THREE.SphereGeometry(1.05, 14, 12);
+  const trunkM = std(0x6b4423, { roughness: 0.86 });
+  const leafM = std(0x3d8c3a, { roughness: 0.62 });
   const trees = 64;
   const trunks = new THREE.InstancedMesh(trunkGeo, trunkM, trees);
   const leaves = new THREE.InstancedMesh(leafGeo, leafM, trees);
+  trunks.castShadow = CAST_ENV;
+  leaves.castShadow = CAST_ENV;
+  leaves.receiveShadow = true;
   const dummy = new THREE.Object3D();
   let placed = 0;
   let guard = 0;
@@ -412,23 +447,28 @@ function scatterGarden(scene, track) {
     dummy.rotation.y = Math.random() * 6;
     dummy.updateMatrix();
     trunks.setMatrixAt(placed, dummy.matrix);
-    dummy.position.y = 1.9 * s;
+    dummy.position.y = 1.85 * s;
+    dummy.scale.set(s, s * 0.92, s);
     dummy.updateMatrix();
     leaves.setMatrixAt(placed, dummy.matrix);
     placed += 1;
   }
+  trunks.count = placed;
+  leaves.count = placed;
+  trunks.instanceMatrix.needsUpdate = true;
+  leaves.instanceMatrix.needsUpdate = true;
   scene.add(trunks);
   scene.add(leaves);
 
   const flowerN = 90;
-  const stemGeo = new THREE.CylinderGeometry(0.04, 0.05, 0.7, 5);
-  const headGeo = new THREE.SphereGeometry(0.22, 8, 6);
-  const stemM = new THREE.MeshLambertMaterial({ color: 0x3f7d3a });
+  const stemGeo = new THREE.CylinderGeometry(0.04, 0.05, 0.7, 8);
+  const headGeo = new THREE.SphereGeometry(0.22, 12, 10);
+  const stemM = std(0x3f7d3a, { roughness: 0.75 });
   const palettes = [0xe07a5f, 0xf4d35e, 0xf2a7d0, 0x7ad7f0, 0xffffff];
   const stems = new THREE.InstancedMesh(stemGeo, stemM, flowerN);
   const heads = new THREE.InstancedMesh(
     headGeo,
-    new THREE.MeshLambertMaterial({ color: 0xffffff }),
+    std(0xffffff, { roughness: 0.45 }),
     flowerN
   );
   placed = 0;
@@ -460,13 +500,15 @@ function scatterGarden(scene, track) {
 }
 
 function scatterSea(scene, track) {
-  const trunkGeo = new THREE.CylinderGeometry(0.12, 0.2, 2.4, 6);
-  const leafGeo = new THREE.ConeGeometry(0.85, 1.4, 6);
-  const trunkM = new THREE.MeshLambertMaterial({ color: 0x8a6a3a });
-  const leafM = new THREE.MeshLambertMaterial({ color: 0x2e8f5a });
+  const trunkGeo = new THREE.CylinderGeometry(0.12, 0.2, 2.4, 10);
+  const leafGeo = new THREE.SphereGeometry(0.85, 12, 10);
+  const trunkM = std(0x8a6a3a, { roughness: 0.82 });
+  const leafM = std(0x2e8f5a, { roughness: 0.58 });
   const trees = 42;
   const trunks = new THREE.InstancedMesh(trunkGeo, trunkM, trees);
   const leaves = new THREE.InstancedMesh(leafGeo, leafM, trees);
+  trunks.castShadow = CAST_ENV;
+  leaves.castShadow = CAST_ENV;
   const dummy = new THREE.Object3D();
   let placed = 0;
   let guard = 0;
@@ -483,21 +525,27 @@ function scatterSea(scene, track) {
     dummy.rotation.y = Math.random() * 6;
     dummy.updateMatrix();
     trunks.setMatrixAt(placed, dummy.matrix);
-    dummy.position.y = 2.3 * s;
+    dummy.position.y = 2.15 * s;
     dummy.updateMatrix();
     leaves.setMatrixAt(placed, dummy.matrix);
     placed += 1;
   }
+  trunks.count = placed;
+  leaves.count = placed;
+  trunks.instanceMatrix.needsUpdate = true;
+  leaves.instanceMatrix.needsUpdate = true;
   scene.add(trunks);
   scene.add(leaves);
   scatterRocks(scene, track, 28, 0xd8c39a);
 }
 
 function scatterVolcano(scene, track) {
-  const coneGeo = new THREE.ConeGeometry(1.4, 2.6, 7);
-  const coneM = new THREE.MeshLambertMaterial({ color: 0x3a2422 });
+  const coneGeo = new THREE.SphereGeometry(1.15, 12, 10);
+  const coneM = std(0x3a2422, { roughness: 0.88 });
   const n = 36;
   const cones = new THREE.InstancedMesh(coneGeo, coneM, n);
+  cones.castShadow = CAST_ENV;
+  cones.receiveShadow = true;
   const dummy = new THREE.Object3D();
   let placed = 0;
   let guard = 0;
@@ -516,13 +564,15 @@ function scatterVolcano(scene, track) {
     cones.setMatrixAt(placed, dummy.matrix);
     placed += 1;
   }
+  cones.count = placed;
+  cones.instanceMatrix.needsUpdate = true;
   scene.add(cones);
   scatterRocks(scene, track, 40, 0x4a3a36);
 }
 
 function scatterRocks(scene, track, count, color) {
-  const rockGeo = new THREE.DodecahedronGeometry(0.55, 0);
-  const rockM = new THREE.MeshLambertMaterial({ color });
+  const rockGeo = new THREE.IcosahedronGeometry(0.55, 1);
+  const rockM = std(color, { roughness: 0.9 });
   for (let i = 0; i < count; i++) {
     const r = 18 + Math.random() * 88;
     const a = Math.random() * Math.PI * 2;
@@ -533,15 +583,19 @@ function scatterRocks(scene, track, count, color) {
     rock.position.set(x, 0.25, z);
     rock.scale.setScalar(0.5 + Math.random() * 1.2);
     rock.rotation.set(Math.random(), Math.random(), Math.random());
+    rock.castShadow = CAST_ENV;
+    rock.receiveShadow = true;
     scene.add(rock);
   }
 }
 
 function honeycombMesh() {
-  const g = new THREE.CylinderGeometry(0.55, 0.55, 0.7, 6);
-  const m = new THREE.MeshLambertMaterial({ color: 0xf4d35e, emissive: 0x553300, emissiveIntensity: 0.45 });
+  const g = new THREE.CylinderGeometry(0.55, 0.55, 0.7, 12);
+  const m = std(0xf4d35e, { roughness: 0.38, metalness: 0.12, emissive: 0x553300, emissiveIntensity: 0.35 });
   const mesh = new THREE.Mesh(g, m);
-  const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.36, 0.14, 6), new THREE.MeshLambertMaterial({ color: 0xe07a5f }));
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.36, 0.14, 12), std(0xe07a5f, { roughness: 0.45 }));
   cap.position.y = 0.4;
   mesh.add(cap);
   return mesh;
@@ -571,7 +625,7 @@ function placeBoostPads(scene, track) {
     const f = track.at(t);
     const mesh = new THREE.Mesh(
       new THREE.PlaneGeometry(3.6, 2.2),
-      new THREE.MeshLambertMaterial({ color: 0xff9f43, emissive: 0x663300, side: THREE.DoubleSide })
+      std(0xff9f43, { emissive: 0x663300, emissiveIntensity: 0.35, side: THREE.DoubleSide, roughness: 0.4 })
     );
     mesh.position.set(f.point.x, f.point.y + 0.18, f.point.z);
     mesh.rotation.x = -Math.PI / 2;
@@ -593,7 +647,7 @@ function addPollen(scene, color = 0xfff2b0) {
   g.setAttribute("position", new THREE.BufferAttribute(arr, 3));
   const pts = new THREE.Points(
     g,
-    new THREE.PointsMaterial({ color, size: 0.18, transparent: true, opacity: 0.65, depthWrite: false })
+    new THREE.PointsMaterial({ color, size: 0.22, transparent: true, opacity: 0.55, depthWrite: false, sizeAttenuation: true })
   );
   pts.userData.pollen = true;
   scene.add(pts);

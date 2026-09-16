@@ -400,6 +400,11 @@ export class AudioBus {
     this._osc("triangle", 520, 0.1, 0.1, 200);
   }
 
+  special() {
+    this._osc("sawtooth", 140, 0.28, 0.12, 90);
+    this._osc("square", 320, 0.16, 0.1, 260);
+  }
+
   finish() {
     [523, 659, 784, 1046].forEach((f, i) => {
       setTimeout(() => this._osc("triangle", f, 0.22, 0.12), i * 110);

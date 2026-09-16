@@ -877,6 +877,28 @@ body[data-stage="volcano"] {
   font-weight: 800;
 }
 
+.special-slot {
+  top: calc(204px + var(--safe-t));
+  height: 78px;
+  border-color: #ff9f43;
+  font-size: 26px;
+  grid-template-rows: auto auto;
+  align-content: center;
+  gap: 2px;
+  pointer-events: none;
+}
+
+.special-slot small {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.special-slot.spent {
+  opacity: 0.38;
+  border-color: #cfc6b4;
+}
+
 .touch-layer {
   position: absolute;
   left: 0;
@@ -934,6 +956,35 @@ body[data-stage="volcano"] {
 .ctrl.slim {
   height: 44px;
   font-size: 13px;
+}
+
+.ctrl.special {
+  height: 70px;
+  font-size: 13px;
+  line-height: 1.15;
+  background: linear-gradient(#ffe08a, #f4d35e);
+}
+
+.ctrl.special small {
+  display: block;
+  font-size: 12px;
+}
+
+.ctrl.special:not(.spent) {
+  animation: special-pulse 1.4s ease-in-out infinite;
+}
+
+.ctrl.special.spent,
+.ctrl.special:disabled {
+  opacity: 0.4;
+  animation: none;
+  background: #d9d0c0;
+}
+
+@keyframes special-pulse {
+  50% {
+    box-shadow: 0 5px 0 #1a120c, 0 0 14px rgba(255, 170, 40, 0.75);
+  }
 }
 
 .ctrl:active,

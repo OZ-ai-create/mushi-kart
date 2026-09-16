@@ -6,6 +6,7 @@ import { Kart, aiInput, bumpKarts } from "./kart.js";
 import { ItemWorld, rollItem, iconOf } from "./items.js";
 import { buildLoadout, cpuKit } from "./garage.js";
 import { getCourse } from "./courses.js";
+import { activateSpecial, aiWantsSpecial, applyRamHits, getSpecial } from "./specials.js";
 
 const LAPS = 3;
 const _look = new THREE.Vector3();
@@ -21,23 +22,29 @@ export class Game {
     this.raf = 0;
 
     const mobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    this.mobile = mobile;
     this.renderer = new THREE.WebGLRenderer({
       canvas,
-      antialias: !mobile,
+      antialias: true,
       powerPreference: "high-performance",
       alpha: false,
     });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, mobile ? 1.5 : 2));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.22;
+    this.renderer.toneMappingExposure = 1.08;
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.setClearColor(0x9ec9e6, 1);
 
     this.scene = new THREE.Scene();
-    this.scene.fog = new THREE.Fog(0x9ec9e6, 48, 150);
-    this.camera = new THREE.PerspectiveCamera(62, 1, 0.35, 380);
+    this.scene.fog = new THREE.FogExp2(0x9ec9e6, 0.0062);
+    this.camera = new THREE.PerspectiveCamera(58, 1, 0.35, 380);
     this.clock = new THREE.Clock();
     this.input = null;
+    this.sun = null;
+    this._lookSmooth = new THREE.Vector3();
+    this._camReady = false;
     this._onResize = () => this.resize();
     window.addEventListener("resize", this._onResize);
     this.resize();
@@ -66,13 +73,31 @@ export class Game {
     this.ended = false;
 
     this._wipeScene();
+    this._camReady = false;
     this.renderer.setClearColor(course.clear, 1);
-    this.scene.fog = new THREE.Fog(course.fog, 55, 200);
-    this.scene.add(new THREE.HemisphereLight(course.hemiSky, course.hemiGnd, course.hemiInt));
-    const sun = new THREE.DirectionalLight(course.sun, course.sunInt);
-    sun.position.set(40, 70, 18);
+    this.scene.fog = new THREE.FogExp2(course.fog, 0.006);
+    this.scene.add(new THREE.HemisphereLight(course.hemiSky, course.hemiGnd, course.hemiInt * 0.68));
+    const sun = new THREE.DirectionalLight(course.sun, course.sunInt * 0.88);
+    sun.position.set(28, 48, 16);
+    sun.castShadow = true;
+    const map = this.mobile ? 1024 : 2048;
+    sun.shadow.mapSize.set(map, map);
+    sun.shadow.bias = -0.0007;
+    sun.shadow.normalBias = 0.04;
+    const box = 26;
+    sun.shadow.camera.left = -box;
+    sun.shadow.camera.right = box;
+    sun.shadow.camera.top = box;
+    sun.shadow.camera.bottom = -box;
+    sun.shadow.camera.near = 6;
+    sun.shadow.camera.far = 110;
     this.scene.add(sun);
-    this.scene.add(new THREE.AmbientLight(course.ambient, 0.55));
+    this.scene.add(sun.target);
+    this.sun = sun;
+    const fill = new THREE.DirectionalLight(0xcfe6ff, 0.18);
+    fill.position.set(-22, 18, -28);
+    this.scene.add(fill);
+    this.scene.add(new THREE.AmbientLight(course.ambient, 0.18));
 
     this.track = new Track(course.id);
     const world = buildWorld(this.scene, this.track);
@@ -106,6 +131,7 @@ export class Game {
     this.player = this.karts.find((k) => k.isPlayer) ?? this.karts[0];
 
     this._snapCamera(true);
+    this._followSun();
     this.clock = new THREE.Clock();
     this.running = true;
     this.paused = false;
@@ -117,11 +143,21 @@ export class Game {
     this.input = input;
   }
 
+  _trySpecial(kart) {
+    if (this.phase !== "racing") return;
+    const spec = activateSpecial(kart, { track: this.track, items: this.items, audio: this.audio });
+    if (!spec) return;
+    const color = spec.id === "horn" ? 0xff6b35 : spec.id === "leap" ? 0x86b36a : spec.id === "lucky" ? 0xff8fab : 0xffe066;
+    this.items?.burst?.(kart, color);
+    if (kart.isPlayer) this.hooks?.onBanner(spec.banner);
+  }
+
   _loop() {
     if (!this.running) return;
     this.raf = requestAnimationFrame(() => this._loop());
     const dt = Math.min(0.033, this.clock.getDelta());
     if (!this.paused) this._update(dt);
+    this._followSun();
     this.renderer.render(this.scene, this.camera);
   }
 
@@ -159,6 +195,8 @@ export class Game {
         this.countShown = n;
         this.audio?.countdown(n);
       }
+      this.input?.consumeSpecial();
+      this.input?.consumeItem();
       this.karts.forEach((k) => k.mesh.userData.update?.(dt, { speed: 0, steer: 0, boost: false }));
       this.obstacles?.update(dt, this.karts, this.audio, false);
       this._snapCamera(false, dt);
@@ -188,6 +226,7 @@ export class Game {
         if (this.input?.consumeItem() && kart.item && kart.roulette <= 0) {
           this.items.use(kart, this.karts, this.audio);
         }
+        if (this.input?.consumeSpecial()) this._trySpecial(kart);
       } else {
         input = aiInput(kart, this.track, this.karts, this.obstacles?.list ?? []);
         kart.aiItemT = (kart.aiItemT || 0) + dt;
@@ -195,6 +234,7 @@ export class Game {
           this.items.use(kart, this.karts, this.audio);
           kart.aiItemT = 0;
         }
+        if (aiWantsSpecial(kart, this.karts, this.obstacles?.list ?? [], this.track)) this._trySpecial(kart);
       }
       kart.update(dt, input, this.track);
       if (kart.wantsBoostSfx && kart.isPlayer) this.audio?.boost();
@@ -216,8 +256,9 @@ export class Game {
     for (let i = 0; i < this.karts.length; i++) {
       for (let j = i + 1; j < this.karts.length; j++) bumpKarts(this.karts[i], this.karts[j]);
     }
+    applyRamHits(this.karts, this.audio);
     for (const kart of this.karts) kart.snapToTrack(this.track, true);
-    this.items.update(dt, this.karts, this.audio);
+    this.items.update(dt, this.karts, this.audio, this.track);
     this.obstacles?.update(dt, this.karts, this.audio, true);
 
     const live = this.karts.filter((k) => !k.finished).sort((a, b) => b.progress - a.progress);
@@ -298,26 +339,37 @@ export class Game {
     }
   }
 
+  _followSun() {
+    if (!this.sun || !this.player) return;
+    const p = this.player.pos;
+    this.sun.position.set(p.x + 22, p.y + 46, p.z + 14);
+    this.sun.target.position.set(p.x, p.y, p.z);
+    this.sun.target.updateMatrixWorld();
+  }
+
   _snapCamera(instant, dt = 0.016) {
     const p = this.player;
-    const back = 8.5 + Math.min(2.6, p.speed * 0.04);
-    const height = 4.5;
+    const back = 8.2 + Math.min(2.4, p.speed * 0.038);
+    const height = 4.15;
     _wanted.set(p.pos.x - Math.sin(p.yaw) * back, p.pos.y + height, p.pos.z - Math.cos(p.yaw) * back);
-    _look.set(p.pos.x + Math.sin(p.yaw) * 12, p.pos.y + 0.4, p.pos.z + Math.cos(p.yaw) * 12);
-    if (instant) {
+    _look.set(p.pos.x + Math.sin(p.yaw) * 11, p.pos.y + 0.55, p.pos.z + Math.cos(p.yaw) * 11);
+    if (instant || !this._camReady) {
       this.camera.position.copy(_wanted);
+      this._lookSmooth.copy(_look);
+      this._camReady = true;
     } else {
-      const k = 1 - Math.exp(-dt * 7.2);
+      const k = 1 - Math.exp(-dt * 6.1);
       this.camera.position.lerp(_wanted, k);
+      this._lookSmooth.lerp(_look, 1 - Math.exp(-dt * 7.4));
     }
     if (p.stun > 0) {
-      this.camera.position.x += (Math.random() - 0.5) * 0.25;
-      this.camera.position.y += (Math.random() - 0.5) * 0.12;
+      this.camera.position.x += (Math.random() - 0.5) * 0.14;
+      this.camera.position.y += (Math.random() - 0.5) * 0.07;
     }
-    this.camera.lookAt(_look);
-    const fov = 60 + Math.min(14, p.speed * 0.28) + (p.boost > 0 ? 6 : 0);
-    if (Math.abs(this.camera.fov - fov) > 0.1) {
-      this.camera.fov = THREE.MathUtils.damp(this.camera.fov, fov, 6, dt);
+    this.camera.lookAt(this._lookSmooth);
+    const fov = 56 + Math.min(10, p.speed * 0.22) + (p.boost > 0 ? 4 : 0);
+    if (Math.abs(this.camera.fov - fov) > 0.08) {
+      this.camera.fov = THREE.MathUtils.damp(this.camera.fov, fov, 5.2, dt);
       this.camera.updateProjectionMatrix();
     }
   }
@@ -361,6 +413,10 @@ export class Game {
         kind: o.mesh.userData.kind,
       })),
       threat: this._playerThreat(),
+      special: (() => {
+        const spec = getSpecial(p.stats.id);
+        return { ready: !p.specialUsed, name: spec.name, icon: spec.icon };
+      })(),
     };
   }
 
@@ -411,6 +467,7 @@ export class Game {
     this.items?.dispose();
     this.obstacles?.dispose?.();
     this.obstacles = null;
+    this.sun = null;
     if (clearScene) this._wipeScene();
   }
 
