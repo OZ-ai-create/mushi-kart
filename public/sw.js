@@ -1,4 +1,4 @@
-const CACHE = "mushi-kart-v4";
+const CACHE = "mushi-kart-v5";
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();
