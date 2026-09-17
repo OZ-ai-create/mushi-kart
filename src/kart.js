@@ -224,7 +224,11 @@ export class Kart {
     if (Math.abs(lat) > wall) {
       lat = Math.sign(lat) * wall;
       this.yaw = trackYaw;
-      this.speed = Math.max(this.speed * 0.72, this.offroad ? 6 : this.speed * 0.9);
+      // Wall contact is now a meaningful mistake: lose speed and suffer a
+      // short stun instead of simply being nudged back onto the track.
+      this.speed *= 0.55;
+      this.stun = Math.max(this.stun, 0.32);
+      this.hitFlash = Math.max(this.hitFlash, 0.2);
     }
     this.lateral = lat;
     this.snapToTrack(track);
