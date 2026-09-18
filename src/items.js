@@ -44,6 +44,7 @@ export class ItemWorld {
     this.ants = [];
     this.slicks = [];
     this.lightning = [];
+    this.particles = [];
     this.track = null;
     this.trackId = null;
   }
@@ -53,6 +54,11 @@ export class ItemWorld {
     kart.item = null;
     if (!id) return;
     audio?.use();
+    const flashColor = {
+      honey: 0xffd54a, acorn: 0x9b6a3d, homing: 0xff4b4b, silk: 0xeaf6ff,
+      leaf: 0x74e36a, gust: 0xbfe8ff, electric: 0xfff06a, mushroom: 0xff6b6b, ants: 0x6b4b3a,
+    }[id] ?? 0xffffff;
+    this.burst(kart, flashColor);
     if (id === "honey") {
       kart.boost = Math.max(kart.boost, 1.55);
       audio?.boost();
@@ -94,14 +100,39 @@ export class ItemWorld {
 
   burst(kart, color = 0xff9f1c) {
     const ring = new THREE.Mesh(
-      new THREE.RingGeometry(0.4, 0.85, 28),
-      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.85, side: THREE.DoubleSide })
+      new THREE.RingGeometry(0.35, 0.72, 32),
+      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.95, side: THREE.DoubleSide })
     );
     ring.rotation.x = -Math.PI / 2;
     ring.position.copy(kart.pos);
     ring.position.y += 0.22;
     this.scene.add(ring);
-    this.rings.push({ mesh: ring, life: 0.45 });
+    this.rings.push({ mesh: ring, life: 0.55, maxLife: 0.55, grow: 20 });
+
+    const ring2 = new THREE.Mesh(
+      new THREE.RingGeometry(0.7, 0.9, 32),
+      new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, side: THREE.DoubleSide })
+    );
+    ring2.rotation.x = -Math.PI / 2;
+    ring2.position.copy(kart.pos);
+    ring2.position.y += 0.3;
+    this.scene.add(ring2);
+    this.rings.push({ mesh: ring2, life: 0.3, maxLife: 0.3, grow: 30 });
+
+    for (let i = 0; i < 18; i++) {
+      const mesh = new THREE.Mesh(
+        new THREE.SphereGeometry(0.055 + Math.random() * 0.06, 6, 5),
+        new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 1 })
+      );
+      const a = (i / 18) * Math.PI * 2 + Math.random() * 0.3;
+      const speed = 3.5 + Math.random() * 6.5;
+      mesh.position.set(kart.pos.x, kart.pos.y + 0.35 + Math.random() * 0.7, kart.pos.z);
+      this.scene.add(mesh);
+      this.particles.push({
+        mesh, life: 0.65 + Math.random() * 0.3,
+        vel: new THREE.Vector3(Math.cos(a) * speed, 2.2 + Math.random() * 4.5, Math.sin(a) * speed)
+      });
+    }
   }
 
   _acorn(kart) {
@@ -438,6 +469,21 @@ export class ItemWorld {
       }
     }
 
+    for (let i = this.particles.length - 1; i >= 0; i--) {
+      const p = this.particles[i];
+      p.life -= dt;
+      p.vel.y -= 8.5 * dt;
+      p.mesh.position.addScaledVector(p.vel, dt);
+      p.mesh.scale.multiplyScalar(Math.max(0.82, 1 - dt * 1.8));
+      p.mesh.material.opacity = Math.max(0, p.life / 0.9);
+      if (p.life <= 0) {
+        this.scene.remove(p.mesh);
+        p.mesh.geometry?.dispose?.();
+        p.mesh.material?.dispose?.();
+        this.particles.splice(i, 1);
+      }
+    }
+
     for (let i = this.lightning.length - 1; i >= 0; i--) {
       const bolt = this.lightning[i];
       bolt.life -= dt;
@@ -453,7 +499,7 @@ export class ItemWorld {
     for (let i = this.rings.length - 1; i >= 0; i--) {
       const r = this.rings[i];
       r.life -= dt;
-      r.mesh.scale.addScalar(dt * 18);
+      r.mesh.scale.addScalar(dt * (r.grow ?? 18));
       r.mesh.material.opacity = Math.max(0, r.life * 1.6);
       if (r.life <= 0) {
         this.scene.remove(r.mesh);
@@ -490,6 +536,11 @@ export class ItemWorld {
     for (const s of this.homingShots) this.scene.remove(s.mesh);
     for (const t of this.traps) this.scene.remove(t.mesh);
     for (const r of this.rings) this.scene.remove(r.mesh);
+    for (const p of this.particles) {
+      this.scene.remove(p.mesh);
+      p.mesh.geometry?.dispose?.();
+      p.mesh.material?.dispose?.();
+    }
     for (const l of this.lightning) {
       this.scene.remove(l.mesh);
       l.mesh.geometry?.dispose?.();
@@ -502,6 +553,7 @@ export class ItemWorld {
     this.traps.length = 0;
     this.rings.length = 0;
     this.lightning.length = 0;
+    this.particles.length = 0;
     this.ants.length = 0;
     this.slicks.length = 0;
     this.track = null;
