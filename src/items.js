@@ -170,9 +170,6 @@ export class ItemWorld {
         target = other;
         bestGap = gap;
         bestDistance = distance;
-      } else if (bestGap === Infinity && distance < bestDistance) {
-        target = other;
-        bestDistance = distance;
       }
     }
 
