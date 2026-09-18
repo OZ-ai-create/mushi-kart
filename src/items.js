@@ -128,17 +128,17 @@ export class ItemWorld {
 
   _homing(kart, karts) {
     let target = null;
-    let bestProgress = -Infinity;
+    let bestGap = Infinity;
     let bestDistance = Infinity;
     for (const other of karts) {
       if (other === kart || other.finished) continue;
-      const ahead = other.progress > kart.progress + 0.005;
+      const gap = other.progress - kart.progress;
       const distance = other.pos.distanceTo(kart.pos);
-      if (ahead && other.progress > bestProgress) {
+      if (gap > 0.005 && gap < bestGap) {
         target = other;
-        bestProgress = other.progress;
+        bestGap = gap;
         bestDistance = distance;
-      } else if (!target && distance < bestDistance) {
+      } else if (bestGap === Infinity && distance < bestDistance) {
         target = other;
         bestDistance = distance;
       }
@@ -202,7 +202,7 @@ export class ItemWorld {
   _electric(kart, karts, audio) {
     let target = null;
     for (const other of karts) {
-      if (other.finished) continue;
+      if (other === kart || other.finished) continue;
       if (!target || other.progress > target.progress) target = other;
     }
 
