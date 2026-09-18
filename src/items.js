@@ -562,13 +562,15 @@ export class ItemWorld {
 }
 
 export function hitKart(kart, audio) {
-  if (kart.ramT > 0 || kart.ghostT > 0 || kart.leapT > 0) return;
+  if (kart.ramT > 0 || kart.ghostT > 0 || kart.leapT > 0 || kart.hitCooldown > 0) return;
   if (kart.shield > 0) {
     kart.shield = 0;
+    kart.hitCooldown = 0.45;
     return;
   }
-  kart.stun = 1.15;
-  kart.speed *= 0.15;
+  kart.hitCooldown = 0.9;
+  kart.stun = 1.05;
+  kart.speed *= 0.12;
   kart.hitFlash = 0.7;
   kart.boost = 0;
   audio?.hit();
