@@ -3,7 +3,7 @@ import { CHARACTERS, getCharacter } from "./characters.js";
 import { createRacer } from "./insects.js";
 import { Track, buildWorld } from "./track.js";
 import { Kart, aiInput, bumpKarts } from "./kart.js";
-import { ItemWorld, rollItem, iconOf } from "./items.js";
+import { ITEM_DEFS, ItemWorld, rollItem, iconOf } from "./items.js";
 import { buildLoadout, cpuKit } from "./garage.js";
 import { getCourse } from "./courses.js";
 import { activateSpecial, aiWantsSpecial, applyRamHits, getSpecial } from "./specials.js";
@@ -378,7 +378,7 @@ export class Game {
     const p = this.player;
     const roulette = p.roulette > 0;
     const icon = roulette
-      ? ["🍯", "🌰", "🕸️", "🍃", "💨"][Math.floor(performance.now() / 80) % 5]
+      ? ITEM_DEFS[Math.floor(performance.now() / 80) % ITEM_DEFS.length].icon
       : p.item
         ? iconOf(p.item)
         : "空";
