@@ -27,6 +27,7 @@ export class Kart {
     this.driftDir = 0;
     this.driftHold = 0;
     this.driftTurboGiven = false;
+    this.driftBoostLevel = 0;
     this.wantsBoostSfx = false;
     this.hop = 0;
     this.offroad = false;
@@ -71,6 +72,7 @@ export class Kart {
     this.drifting = false;
     this.driftHold = 0;
     this.driftTurboGiven = false;
+    this.driftBoostLevel = 0;
     this.item = null;
     this.roulette = 0;
     this._pitch = 0;
@@ -140,25 +142,27 @@ export class Kart {
         this.driftDir = Math.sign(steer) || this.driftDir || 1;
         this.driftHold = 0;
         this.driftTurboGiven = false;
+        this.driftBoostLevel = 0;
         this.hop = 1;
       }
       this.driftHold += dt;
+      this.driftBoostLevel =
+        this.driftHold >= 2.2 ? 3 :
+        this.driftHold >= 1.35 ? 2 :
+        this.driftHold >= 0.65 ? 1 : 0;
       steer = this.driftDir * 0.28 + steer * 0.22;
-      if (!this.driftTurboGiven && this.driftHold >= 3 && this.speed > 7) {
-        this.driftTurboGiven = true;
-        this.boost = Math.max(this.boost, 1.5);
-        this.wantsBoostSfx = true;
-      }
     } else if (this.drifting) {
-      if (!this.driftTurboGiven && this.driftHold >= 3 && this.speed > 7 && !this.finished) {
-        this.boost = Math.max(this.boost, 1.5);
-        this.wantsBoostSfx = true;
-      } else if (!this.driftTurboGiven && this.driftHold > 0.5 && this.speed > 7 && !this.finished) {
-        this.boost = Math.max(this.boost, 0.55);
+      if (!this.driftTurboGiven && this.speed > 7 && !this.finished) {
+        const turbo = [0, 0.38, 0.72, 1.2][this.driftBoostLevel];
+        if (turbo > 0) {
+          this.boost = Math.max(this.boost, turbo);
+          this.wantsBoostSfx = true;
+        }
       }
       this.drifting = false;
       this.driftHold = 0;
       this.driftTurboGiven = false;
+      this.driftBoostLevel = 0;
     }
 
     const boosting = this.boost > 0;
@@ -260,6 +264,8 @@ export class Kart {
       boost: boosting || this.ramT > 0,
       shield: this.shield > 0 || this.ghostT > 0,
       ram: this.ramT > 0,
+      drift: this.drifting,
+      driftLevel: this.driftBoostLevel,
     });
     if (this.hitFlash > 0) this.mesh.visible = Math.sin(this.hitFlash * 40) > 0;
     else this.mesh.visible = true;
