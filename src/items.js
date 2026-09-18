@@ -190,13 +190,15 @@ export class ItemWorld {
     body.position.y += 0.55;
     this.scene.add(body);
 
-    const vel = new THREE.Vector3(Math.sin(kart.yaw) * 30, 0, Math.cos(kart.yaw) * 30);
+    const vel = new THREE.Vector3(Math.sin(kart.yaw) * 42, 0, Math.cos(kart.yaw) * 42);
     this.homingShots.push({
       mesh: body,
       owner: kart,
       target,
       vel,
-      life: 4.2,
+      speed: 42,
+      maxSpeed: 48,
+      life: 4.8,
       wallCooldown: 0,
     });
   }
@@ -394,9 +396,10 @@ export class ItemWorld {
         if (desired.lengthSq() > 0.01) {
           desired.normalize();
           const current = s.vel.clone().setY(0).normalize();
-          const turn = Math.min(1, 8.5 * dt);
+          const turn = Math.min(1, 12 * dt);
           current.lerp(desired, turn).normalize();
-          s.vel.set(current.x * 30, 0, current.z * 30);
+          s.speed = Math.min(s.maxSpeed, s.speed + 10 * dt);
+          s.vel.set(current.x * s.speed, 0, current.z * s.speed);
         }
       }
 
