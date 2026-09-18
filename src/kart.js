@@ -47,6 +47,7 @@ export class Kart {
     this._lastT = 0;
     this._passedMid = false;
     this.hitFlash = 0;
+    this.hitCooldown = 0;
     this.lastPos = new THREE.Vector3();
     this._pitch = 0;
     this.specialUsed = false;
@@ -105,6 +106,7 @@ export class Kart {
     this.lastPos.copy(this.pos);
     this.wantsBoostSfx = false;
     if (this.hitFlash > 0) this.hitFlash -= dt;
+    if (this.hitCooldown > 0) this.hitCooldown -= dt;
     if (this.shield > 0) this.shield -= dt;
     if (this.boost > 0) this.boost -= dt;
     if (this.ramT > 0) this.ramT -= dt;
