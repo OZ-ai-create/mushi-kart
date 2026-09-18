@@ -63,7 +63,7 @@ export const COURSES = [
         const x = Math.cos(a) * 72 + Math.cos(a * 2) * 11 + Math.sin(a * 3) * 3.2;
         const z = Math.sin(a) * 52 + Math.sin(a * 3) * 7.2 + Math.cos(a * 2) * 4.1;
         const y = 6.2 + Math.sin(a - 0.35) * 3.7 + Math.sin(a * 2) * 1.65 + Math.cos(a * 3) * 0.45;
-        return new THREE.Vector3(x, y, z);
+        return new THREE.Vector3(x * 1.5, y * 1.12, z * 1.5);
       });
     },
   },
@@ -106,7 +106,7 @@ export const COURSES = [
         const z = Math.sin(a) * 50 + Math.sin(a * 2) * 6.4 + Math.cos(a * 3) * 3.1;
         const dune = Math.pow(Math.max(0, Math.sin(a - 0.2)), 1.35);
         const y = 0.55 + dune * 4.2 + Math.sin(a * 3) * 0.28;
-        return new THREE.Vector3(x, y, z);
+        return new THREE.Vector3(x * 1.5, y * 1.12, z * 1.5);
       });
     },
   },
@@ -149,7 +149,7 @@ export const COURSES = [
         const z = Math.sin(a) * 64 + Math.cos(a * 3) * 6.2 + Math.sin(a * 2) * 3.4;
         const climb = 0.5 + 0.5 * Math.sin(a);
         const y = 2.35 + climb * 6.1 + Math.sin(a * 2) * 1.55;
-        return new THREE.Vector3(x, y, z);
+        return new THREE.Vector3(x * 1.5, y * 1.12, z * 1.5);
       });
     },
   },
