@@ -201,7 +201,15 @@ export class Game {
       this.obstacles?.update(dt, this.karts, this.audio, false);
       this._snapCamera(false, dt);
       this.hooks?.onHud(this._hud());
-      if (this.countT >= 3.35) this.phase = "racing";
+      if (this.countT >= 3.35) {
+        this.phase = "racing";
+        for (const k of this.karts) {
+          k.boost = Math.max(k.boost, 0.62);
+          k.speed = Math.max(k.speed, k.stats.maxSpeed * 0.38);
+          k.slipstreamT = 0;
+        }
+        this.audio?.boost();
+      }
       return;
     }
 
@@ -258,6 +266,7 @@ export class Game {
     }
     applyRamHits(this.karts, this.audio);
     for (const kart of this.karts) kart.snapToTrack(this.track, true);
+    this._updateSlipstream(dt);
     this.items.update(dt, this.karts, this.audio, this.track);
     this.obstacles?.update(dt, this.karts, this.audio, true);
 
@@ -276,6 +285,36 @@ export class Game {
       if (this.finishWait > 2.8 && !this.ended) {
         this.ended = true;
         this.hooks?.onRaceEnd(this._results());
+      }
+    }
+  }
+
+  _updateSlipstream(dt) {
+    for (const kart of this.karts) {
+      if (kart.finished || kart.speed < 14 || kart.boost > 0) {
+        kart.slipstreamT = 0;
+        continue;
+      }
+      let draft = false;
+      let bestGap = Infinity;
+      for (const other of this.karts) {
+        if (other === kart || other.finished) continue;
+        const gap = other.progress - kart.progress;
+        if (gap <= 0 || gap > 0.075 || Math.abs(other.lateral - kart.lateral) > 1.15) continue;
+        const distance = kart.pos.distanceTo(other.pos);
+        if (distance < 7.5 && gap < bestGap) {
+          bestGap = gap;
+          draft = true;
+        }
+      }
+      kart.slipstreamT = draft ? (kart.slipstreamT || 0) + dt : Math.max(0, (kart.slipstreamT || 0) - dt * 2);
+      if (kart.slipstreamT >= 0.8) {
+        kart.slipstreamT = 0;
+        kart.boost = Math.max(kart.boost, 0.85);
+        if (kart.isPlayer) {
+          this.audio?.boost();
+          this.hooks?.onBanner("スリップストリーム！");
+        }
       }
     }
   }
