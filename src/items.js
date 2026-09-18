@@ -43,6 +43,7 @@ export class ItemWorld {
     this.rings = [];
     this.ants = [];
     this.slicks = [];
+    this.lightning = [];
     this.track = null;
     this.trackId = null;
   }
@@ -217,6 +218,26 @@ export class ItemWorld {
     ring.position.y += 0.25;
     this.scene.add(ring);
     this.rings.push({ mesh: ring, life: 0.7 });
+
+    // A short jagged lightning bolt makes the strike immediately readable.
+    const points = [];
+    const startY = target.pos.y + 8.5;
+    const endY = target.pos.y + 0.35;
+    const steps = 7;
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      points.push(new THREE.Vector3(
+        target.pos.x + (i === 0 || i === steps ? 0 : (Math.random() - 0.5) * 1.2),
+        startY + (endY - startY) * t,
+        target.pos.z + (i === 0 || i === steps ? 0 : (Math.random() - 0.5) * 1.2)
+      ));
+    }
+    const bolt = new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints(points),
+      new THREE.LineBasicMaterial({ color: 0xfff06a, transparent: true, opacity: 0.95 })
+    );
+    this.scene.add(bolt);
+    this.lightning.push({ mesh: bolt, life: 0.28 });
 
     if (target.shield > 0) {
       target.shield = 0;
@@ -417,6 +438,18 @@ export class ItemWorld {
       }
     }
 
+    for (let i = this.lightning.length - 1; i >= 0; i--) {
+      const bolt = this.lightning[i];
+      bolt.life -= dt;
+      bolt.mesh.material.opacity = Math.max(0, bolt.life / 0.28);
+      if (bolt.life <= 0) {
+        this.scene.remove(bolt.mesh);
+        bolt.mesh.geometry?.dispose?.();
+        bolt.mesh.material?.dispose?.();
+        this.lightning.splice(i, 1);
+      }
+    }
+
     for (let i = this.rings.length - 1; i >= 0; i--) {
       const r = this.rings[i];
       r.life -= dt;
@@ -457,12 +490,18 @@ export class ItemWorld {
     for (const s of this.homingShots) this.scene.remove(s.mesh);
     for (const t of this.traps) this.scene.remove(t.mesh);
     for (const r of this.rings) this.scene.remove(r.mesh);
+    for (const l of this.lightning) {
+      this.scene.remove(l.mesh);
+      l.mesh.geometry?.dispose?.();
+      l.mesh.material?.dispose?.();
+    }
     for (const a of this.ants) this.scene.remove(a.mesh);
     for (const s of this.slicks) this.scene.remove(s.mesh);
     this.shots.length = 0;
     this.homingShots.length = 0;
     this.traps.length = 0;
     this.rings.length = 0;
+    this.lightning.length = 0;
     this.ants.length = 0;
     this.slicks.length = 0;
     this.track = null;
