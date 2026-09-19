@@ -251,10 +251,12 @@ export class Game {
       let input;
       if (kart.isPlayer) {
         input = this.input?.sample() ?? { steer: 0, drift: false, brake: false };
-        if (this.input?.consumeItem() && kart.item && kart.roulette <= 0) {
-          this.items.use(kart, this.karts, this.audio);
-        }
-        if (this.input?.consumeSpecial()) this._trySpecial(kart);
+        const itemTap = !!this.input?.consumeItem();
+        const usedItem = !!(itemTap && kart.item && kart.roulette <= 0);
+        if (usedItem) this.items.use(kart, this.karts, this.audio);
+        const usedSpecial = !!this.input?.consumeSpecial();
+        if (usedSpecial) this._trySpecial(kart);
+        input = { ...input, usedItem, usedSpecial, itemTap };
       } else {
         input = aiInput(kart, this.track, this.karts, this.obstacles?.list ?? []);
         kart.aiItemT = (kart.aiItemT || 0) + dt;
@@ -433,11 +435,8 @@ export class Game {
       if (d * this.track.length < 4.5 && Math.abs(kart.lateral) > s.minLat && Math.sign(kart.lateral) === s.side) {
         kart.t = (kart.t + s.skip + 1) % 1;
         kart.lateral *= 0.72;
-        kart.speed = Math.max(kart.speed, kart.stats.maxSpeed * 0.92);
-        kart.boost = Math.max(kart.boost, 0.48);
         this.shortcutCd = 1.2;
         if (kart.isPlayer) {
-          this.audio?.boost();
           this.hooks?.onBanner?.("ショートカット！ " + s.name);
         }
         break;

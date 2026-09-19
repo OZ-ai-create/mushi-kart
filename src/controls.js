@@ -71,7 +71,8 @@ export class Input {
           /* synthetic events in tests / some WebViews */
         }
       });
-      const up = () => {
+      const up = (e) => {
+        if (e.type === "pointercancel" && key === "drift" && (this._itemQueued || this._specialQueued)) return;
         onUp();
         setHeld(btn, false);
       };

@@ -61,6 +61,8 @@ export class Kart {
     this.leapMax = 0;
     this._ramHit = null;
     this._walled = false;
+    this._itemDriftLock = 0;
+    this._driftRelease = 0;
   }
 
   spawn(track, t, lateral) {
@@ -157,7 +159,10 @@ export class Kart {
     }
 
     let steer = input.steer;
-    const keepDrift = this.drifting && input.drift && !this.finished && this.speed > 6;
+    if (input.usedItem || input.usedSpecial || input.itemTap) this._itemDriftLock = 0.4;
+    if (this._itemDriftLock > 0) this._itemDriftLock -= dt;
+    const holdDrift = !!(input.drift || this._itemDriftLock > 0);
+    const keepDrift = this.drifting && holdDrift && !this.finished && this.speed > 6;
     const startDrift = !this.finished && this.speed > 9 && input.drift && Math.abs(steer) > 0.12;
     if (keepDrift || startDrift) {
       if (!this.drifting) {
@@ -166,24 +171,34 @@ export class Kart {
         this.driftHold = 0;
         this.driftTurboGiven = false;
         this.driftBoostLevel = 0;
-        this.hop = 0.78;
+        this.hop = 0.42;
+        this._driftRelease = 0;
+        this._driftInward = 0;
       }
       this.driftHold += dt * (this.stats.driftBonus || 1);
       this.driftStage = this.driftHold >= 2.2 ? 3 : this.driftHold >= 1.1 ? 2 : this.driftHold >= 0.45 ? 1 : 0;
       this.driftBoostLevel = this.driftStage;
       const inward = THREE.MathUtils.clamp(steer * this.driftDir, -1, 1);
-      steer = this.driftDir * (0.46 + Math.max(0, inward) * 0.4) + Math.min(0, inward) * 0.14 * this.driftDir;
+      this._driftInward = inward;
+      this._driftRelease = 0;
+      steer = this.driftDir * (0.14 + Math.max(0, inward) * 0.1) + Math.min(0, inward) * 0.08 * this.driftDir;
     } else if (this.drifting) {
-      if (!this.driftTurboGiven && this.speed > 7 && !this.finished) {
-        if (this.driftStage >= 3) this._giveTurbo(1.95);
-        else if (this.driftStage >= 2) this._giveTurbo(1.25);
-        else if (this.driftStage >= 1) this._giveTurbo(0.62);
+      this._driftRelease = (this._driftRelease || 0) + dt;
+      if (this._driftRelease < 0.12) {
+        steer = this.driftDir * (0.14 + Math.max(0, this._driftInward || 0) * 0.1);
+      } else {
+        if (!this.driftTurboGiven && this.speed > 7 && !this.finished) {
+          if (this.driftStage >= 3) this._giveTurbo(1.95);
+          else if (this.driftStage >= 2) this._giveTurbo(1.25);
+          else if (this.driftStage >= 1) this._giveTurbo(0.62);
+        }
+        this.drifting = false;
+        this.driftHold = 0;
+        this.driftTurboGiven = false;
+        this.driftBoostLevel = 0;
+        this.driftStage = 0;
+        this._driftRelease = 0;
       }
-      this.drifting = false;
-      this.driftHold = 0;
-      this.driftTurboGiven = false;
-      this.driftBoostLevel = 0;
-      this.driftStage = 0;
     }
 
     const boosting = this.boost > 0;
@@ -214,7 +229,7 @@ export class Kart {
 
     const airborne = this.hop > 0.12;
     const grip = THREE.MathUtils.clamp(Math.abs(this.speed) / 10, 0.18, 1) * (airborne ? 0.72 : 1);
-    const rate = this.stats.handling * (this.drifting ? 1.28 : 1.82) * (this.luckyT > 0 ? 1.72 : 1);
+    const rate = this.stats.handling * (this.drifting ? 0.62 : 1.82) * (this.luckyT > 0 ? 1.72 : 1);
     this.yaw += -steer * rate * grip * dt;
     this.steerVis = THREE.MathUtils.damp(this.steerVis, steer, 12, dt);
 
@@ -232,12 +247,19 @@ export class Kart {
 
     if (this.isPlayer) {
       const handsOff = 1 - Math.min(1, Math.abs(input.steer));
-      const lock = this.drifting ? 0.18 : 1;
-      const assist = handsOff * (this.offroad ? 3.4 : 1.45) * (this.drifting ? 0.28 : 1);
-      this.yaw += align * Math.min(1, assist * dt);
-      lat += -lat * dt * 1.15 * handsOff * lock;
+      if (this.drifting) {
+        const inward = this._driftInward || 0;
+        const cut = 0.07 + Math.max(0, inward) * 0.1;
+        const want = trackYaw - this.driftDir * cut;
+        this.yaw += wrapPi(want - this.yaw) * Math.min(1, 5.2 * dt);
+        lat += -this.driftDir * (0.28 + Math.max(0, inward) * 0.45) * dt * Math.min(1, this.speed / 18);
+      } else {
+        const assist = handsOff * (this.offroad ? 3.4 : 1.45);
+        this.yaw += align * Math.min(1, assist * dt);
+        lat += -lat * dt * 1.15 * handsOff;
+      }
     } else {
-      const want = trackYaw - (this.drifting ? this.driftDir * 0.38 : 0);
+      const want = trackYaw - (this.drifting ? this.driftDir * 0.22 : 0);
       this.yaw += wrapPi(want - this.yaw) * Math.min(1, 11 * dt);
       const laneMax = Math.max(0.55, hw - 1.15);
       const lane = THREE.MathUtils.clamp(this.aiOffset, -laneMax, laneMax);
@@ -278,7 +300,7 @@ export class Kart {
     this.mesh.position.copy(this.pos);
     this.mesh.rotation.order = "YXZ";
     this.mesh.rotation.y = this.yaw;
-    const roll = -this.steerVis * 0.22 - (this.drifting ? this.driftDir * 0.38 : 0);
+    const roll = -this.steerVis * 0.22 - (this.drifting ? this.driftDir * 0.22 : 0);
     this.mesh.rotation.z = roll;
     const ahead = track.at(this.t + 0.01);
     const here = track.at(this.t);
