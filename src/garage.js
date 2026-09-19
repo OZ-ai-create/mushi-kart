@@ -190,6 +190,14 @@ const CPU_KITS = {
   ladybug: { bodyId: "leaf", tireId: "slick" },
   bee: { bodyId: "honey", tireId: "cloud" },
   hopper: { bodyId: "stream", tireId: "spike" },
+  mantis: { bodyId: "acorn", tireId: "spike" },
+  stag: { bodyId: "stream", tireId: "dirt" },
+  butterfly: { bodyId: "leaf", tireId: "slick" },
+  dragonfly: { bodyId: "honey", tireId: "cloud" },
+  locust: { bodyId: "stream", tireId: "spike" },
+  ant: { bodyId: "acorn", tireId: "dirt" },
+  cicada: { bodyId: "honey", tireId: "cloud" },
+  firefly: { bodyId: "leaf", tireId: "slick" },
 };
 
 const GARAGE_KEY = "mushi-kart-garage";

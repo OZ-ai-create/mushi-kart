@@ -120,6 +120,7 @@ export class ItemWorld {
     this.slicks = [];
     this.lightning = [];
     this.particles = [];
+    this.slashes = [];
     this.track = null;
     this.trackId = null;
   }
@@ -172,6 +173,74 @@ export class ItemWorld {
       this.slicks.push({ mesh, life: 7.5, owner: kart, hit: new Set() });
     }
     this.burst(kart, 0xffe066);
+  }
+
+  slashWave(kart) {
+    const mesh = new THREE.Mesh(
+      new THREE.TorusGeometry(1.05, 0.08, 6, 22, Math.PI * 1.2),
+      new THREE.MeshBasicMaterial({ color: 0x9fd36a, transparent: true, opacity: 0.92, side: THREE.DoubleSide })
+    );
+    mesh.position.copy(kart.pos);
+    mesh.position.y += 0.48;
+    mesh.rotation.y = kart.yaw;
+    mesh.rotation.x = -0.2;
+    this.scene.add(mesh);
+    this.slashes.push({
+      mesh,
+      owner: kart,
+      vel: new THREE.Vector3(Math.sin(kart.yaw) * 34, 0, Math.cos(kart.yaw) * 34),
+      life: 0.62,
+      hit: new Set(),
+    });
+    this.burst(kart, 0x86b36a);
+    this.fx?.burst?.(kart.pos, 0x9fd36a, 18);
+  }
+
+  swarmRing(kart) {
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      const mesh = new THREE.Group();
+      const body = new THREE.Mesh(
+        new THREE.SphereGeometry(0.16, 7, 5),
+        new THREE.MeshLambertMaterial({ color: 0x2a211c })
+      );
+      const head = new THREE.Mesh(
+        new THREE.SphereGeometry(0.1, 7, 5),
+        new THREE.MeshLambertMaterial({ color: 0x171310 })
+      );
+      head.position.z = 0.14;
+      mesh.add(body, head);
+      mesh.position.set(kart.pos.x + Math.cos(a) * 2.15, kart.pos.y + 0.18, kart.pos.z + Math.sin(a) * 2.15);
+      this.scene.add(mesh);
+      this.ants.push({ mesh, life: 7.2, owner: kart, drift: (i - 3.5) * 0.07 });
+    }
+    this.burst(kart, 0x6b4b3a);
+  }
+
+  sonicBurst(kart, karts, audio) {
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(0.5, 0.85, 28),
+      new THREE.MeshBasicMaterial({ color: 0xe8d48a, transparent: true, opacity: 0.9, side: THREE.DoubleSide })
+    );
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.copy(kart.pos);
+    ring.position.y += 0.22;
+    this.scene.add(ring);
+    this.rings.push({ mesh: ring, life: 0.55, maxLife: 0.55, grow: 28 });
+    this.fx?.burst?.(kart.pos, 0xe8d48a, 26);
+    for (const other of karts) {
+      if (other === kart || other.finished || other.ghostT > 0 || other.leapT > 0) continue;
+      if (other.pos.distanceTo(kart.pos) > 7.2) continue;
+      if (other.shield > 0) {
+        other.shield = 0;
+        continue;
+      }
+      other.stun = Math.max(other.stun, 1.05);
+      other.speed *= 0.42;
+      other.boost = 0;
+      other.hitFlash = Math.max(other.hitFlash, 0.7);
+      audio?.hit?.();
+    }
   }
 
   burst(kart, color = 0xff9f1c) {
@@ -465,6 +534,46 @@ export class ItemWorld {
       }
     }
 
+    for (let i = this.slashes.length - 1; i >= 0; i--) {
+      const s = this.slashes[i];
+      s.life -= dt;
+      s.mesh.position.addScaledVector(s.vel, dt);
+      s.mesh.rotation.y += dt * 8;
+      s.mesh.material.opacity = Math.max(0, s.life / 0.62);
+      this.fx?.trail?.(s.mesh.position, 0x9fd36a);
+      let dead = s.life <= 0;
+      for (const k of karts) {
+        if (k === s.owner || k.finished || s.hit.has(k)) continue;
+        if (k.ghostT > 0 || k.leapT > 0 || k.ramT > 0) continue;
+        if (k.pos.distanceTo(s.mesh.position) > 1.55) continue;
+        if (tryAutoDefend(k, s, audio, this)) {
+          s.hit.add(k);
+          continue;
+        }
+        if (k.shield > 0) {
+          k.shield = 0;
+          s.hit.add(k);
+          continue;
+        }
+        s.hit.add(k);
+        const away = Math.sign(k.lateral - s.owner.lateral) || (Math.random() < 0.5 ? 1 : -1);
+        k.lateral += away * 2.4;
+        k.stun = Math.max(k.stun, 1.22);
+        k.speed *= 0.18;
+        k.boost = 0;
+        k.hitFlash = 0.8;
+        if (s.owner) s.owner.itemsHit = (s.owner.itemsHit || 0) + 1;
+        this.fx?.hit?.(k.pos);
+        audio?.hit?.();
+      }
+      if (dead) {
+        this.scene.remove(s.mesh);
+        s.mesh.geometry?.dispose?.();
+        s.mesh.material?.dispose?.();
+        this.slashes.splice(i, 1);
+      }
+    }
+
     for (let i = this.homingShots.length - 1; i >= 0; i--) {
       const s = this.homingShots[i];
       s.life -= dt;
@@ -644,6 +753,11 @@ export class ItemWorld {
     }
     for (const a of this.ants) this.scene.remove(a.mesh);
     for (const s of this.slicks) this.scene.remove(s.mesh);
+    for (const s of this.slashes) {
+      this.scene.remove(s.mesh);
+      s.mesh.geometry?.dispose?.();
+      s.mesh.material?.dispose?.();
+    }
     this.shots.length = 0;
     this.homingShots.length = 0;
     this.traps.length = 0;
@@ -652,6 +766,7 @@ export class ItemWorld {
     this.particles.length = 0;
     this.ants.length = 0;
     this.slicks.length = 0;
+    this.slashes.length = 0;
     this.track = null;
     this.trackId = null;
   }

@@ -165,19 +165,30 @@ export class Game {
 
   _trySpecial(kart) {
     if (this.phase !== "racing") return;
-    const spec = activateSpecial(kart, { track: this.track, items: this.items, audio: this.audio });
+    const spec = activateSpecial(kart, {
+      track: this.track,
+      items: this.items,
+      audio: this.audio,
+      karts: this.karts,
+    });
     if (!spec) return;
     const color =
-      spec.id === "horn"
-        ? 0xff6b35
-        : spec.id === "leap"
-          ? 0x86b36a
-          : spec.id === "lucky"
-            ? 0xff8fab
-            : 0xffe066;
+      {
+        horn: 0xff6b35,
+        leap: 0x86b36a,
+        highjump: 0xc4a24a,
+        lucky: 0xff8fab,
+        slash: 0x9fd36a,
+        jaws: 0xb08a4a,
+        bloom: 0xf2a0c8,
+        dart: 0x6ec4e8,
+        swarm: 0x6b4b3a,
+        sonic: 0xe8d48a,
+        veil: 0xc8e85a,
+      }[spec.id] ?? 0xffe066;
     this.items?.burst?.(kart, color);
-    this.fx?.burst?.(kart.pos, color, 22);
-    this._camPunch = Math.max(this._camPunch, 0.28);
+    this.fx?.burst?.(kart.pos, color, spec.id === "sonic" || spec.id === "veil" ? 30 : 22);
+    this._camPunch = Math.max(this._camPunch, spec.id === "sonic" ? 0.42 : 0.28);
     if (kart.isPlayer) this.hooks?.onBanner(spec.banner);
   }
 

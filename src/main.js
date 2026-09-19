@@ -1,5 +1,5 @@
 import "./style.css";
-import { CHARACTERS } from "./characters.js";
+import { CHARACTERS, charStarStats, starLine } from "./characters.js";
 import { createPreviewLoop } from "./insects.js";
 import { AudioBus } from "./audio.js";
 import { Input } from "./controls.js";
@@ -522,20 +522,27 @@ function paintGarageGrid() {
   const profile = loadProfile();
   if (garageTab === "char") {
     for (const c of CHARACTERS) {
+      const spec = getSpecial(c.id);
+      const stars = charStarStats(c)
+        .map((s) => `<li>${s.name} ${starLine(s.n)}</li>`)
+        .join("");
       const b = document.createElement("button");
+      b.type = "button";
       b.className = "char-card" + (c.id === selected ? " selected" : "");
-      b.innerHTML = `${c.emoji} ${c.name}<small>${c.tag}</small>`;
+      b.innerHTML = `<span class="char-card-name">${c.emoji} ${c.name}</span><ul class="char-stars">${stars}</ul><p class="char-sp">必殺技：${spec.icon} ${spec.name}</p>`;
       b.addEventListener("click", () => {
         selected = c.id;
         lastChar = c.id;
         persistGarage();
         paintStats();
         paintGarageGrid();
-        $("char-desc").textContent = c.desc;
+        $("char-desc").textContent = `${c.desc}　必殺技：${spec.name} … ${spec.desc}`;
       });
       grid.appendChild(b);
     }
-    $("char-desc").textContent = CHARACTERS.find((c) => c.id === selected).desc;
+    const cur = CHARACTERS.find((c) => c.id === selected);
+    const spec = getSpecial(cur.id);
+    $("char-desc").textContent = `${cur.desc}　必殺技：${spec.name} … ${spec.desc}`;
     return;
   }
   const kind = garageTab === "body" ? "bodies" : garageTab === "tire" ? "tires" : "accessories";

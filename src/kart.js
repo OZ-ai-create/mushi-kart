@@ -59,6 +59,7 @@ export class Kart {
     this.ramT = 0;
     this.ghostT = 0;
     this.luckyT = 0;
+    this.flowerT = 0;
     this.leapT = 0;
     this.leapMax = 0;
     this._ramHit = null;
@@ -106,6 +107,7 @@ export class Kart {
     this.ramT = 0;
     this.ghostT = 0;
     this.luckyT = 0;
+    this.flowerT = 0;
     this.leapT = 0;
     this.leapMax = 0;
     this._ramHit = null;
@@ -164,6 +166,7 @@ export class Kart {
     if (this.ramT > 0) this.ramT -= dt;
     if (this.ghostT > 0) this.ghostT -= dt;
     if (this.luckyT > 0) this.luckyT -= dt;
+    if (this.flowerT > 0) this.flowerT -= dt;
     if (this.leapT > 0) {
       this.leapT -= dt;
       this.hop = Math.max(this.hop, this.leapT / Math.max(0.01, this.leapMax));
@@ -173,7 +176,7 @@ export class Kart {
         this.boostBurst = true;
       }
     }
-    if (this.hop > 0) this.hop -= dt * (this.leapT > 0 ? 0.9 : 3.6);
+    if (this.hop > 0) this.hop -= dt * (this.leapT > 0 ? 0.9 : 3.6 / Math.max(1, this.stats.jumpBonus || 1));
     if (hopBefore > 0 && this.hop <= 0) this.justLanded = true;
 
     if (this.roulette > 0) {
@@ -203,13 +206,13 @@ export class Kart {
         this.driftHold = 0;
         this.driftTurboGiven = false;
         this.driftBoostLevel = 0;
-        this.hop = 0.52;
+        this.hop = 0.52 * Math.min(1.4, this.stats.jumpBonus || 1);
         this._driftRelease = 0;
         this._driftInward = 0;
       } else if (this.driftHold < 0.22 && Math.abs(steer) > 0.1) {
         this.driftDir = Math.sign(steer);
       }
-      this.driftHold += dt * (this.stats.driftBonus || 1);
+      this.driftHold += dt * (this.stats.driftBonus || 1) * (this.flowerT > 0 ? 1.55 : 1);
       this.driftStage = this.driftHold >= 2.2 ? 3 : this.driftHold >= 1.1 ? 2 : this.driftHold >= 0.45 ? 1 : 0;
       this.driftBoostLevel = this.driftStage;
       const inward = THREE.MathUtils.clamp(steer * this.driftDir, -1, 1);
@@ -263,7 +266,11 @@ export class Kart {
 
     const airborne = this.hop > 0.12;
     const grip = THREE.MathUtils.clamp(Math.abs(this.speed) / 10, 0.18, 1) * (airborne ? 0.72 : 1);
-    const rate = this.stats.handling * (this.drifting ? 0.62 : 1.82) * (this.luckyT > 0 ? 1.72 : 1);
+    const rate =
+      this.stats.handling *
+      (this.drifting ? 0.62 : 1.82) *
+      (this.luckyT > 0 ? 1.72 : 1) *
+      (this.flowerT > 0 ? 1.55 : 1);
     this.yaw += -steer * rate * grip * dt;
     this.steerVis = THREE.MathUtils.damp(this.steerVis, steer, 12, dt);
 

@@ -349,6 +349,14 @@ const DRIVE = {
   ladybug: { legColor: 0x1a120c, legR: 0.034, shoulderX: 0.24, shoulderY: 0.58, shoulderZ: 0.14, wheelR: 0.16 },
   bee: { legColor: 0x3b2a18, legR: 0.036, shoulderX: 0.22, shoulderY: 0.58, shoulderZ: 0.14, wheelR: 0.16 },
   hopper: { legColor: 0x7a9a45, legR: 0.038, shoulderX: 0.22, shoulderY: 0.62, shoulderZ: 0.2, wheelR: 0.16 },
+  mantis: { legColor: 0x5a8a32, legR: 0.04, shoulderX: 0.28, shoulderY: 0.64, shoulderZ: 0.16, wheelR: 0.16 },
+  stag: { legColor: 0x241810, legR: 0.048, shoulderX: 0.3, shoulderY: 0.58, shoulderZ: 0.12, wheelR: 0.17 },
+  butterfly: { legColor: 0x4a2a38, legR: 0.03, shoulderX: 0.2, shoulderY: 0.56, shoulderZ: 0.12, wheelR: 0.15 },
+  dragonfly: { legColor: 0x1a3a48, legR: 0.032, shoulderX: 0.2, shoulderY: 0.58, shoulderZ: 0.14, wheelR: 0.15 },
+  locust: { legColor: 0x8a7a32, legR: 0.04, shoulderX: 0.24, shoulderY: 0.64, shoulderZ: 0.18, wheelR: 0.16 },
+  ant: { legColor: 0x241810, legR: 0.03, shoulderX: 0.18, shoulderY: 0.52, shoulderZ: 0.1, wheelR: 0.14 },
+  cicada: { legColor: 0x3a4a22, legR: 0.038, shoulderX: 0.26, shoulderY: 0.6, shoulderZ: 0.12, wheelR: 0.16 },
+  firefly: { legColor: 0x12180e, legR: 0.03, shoulderX: 0.18, shoulderY: 0.54, shoulderZ: 0.12, wheelR: 0.14 },
 };
 
 function makeBeetle(root) {
@@ -553,11 +561,294 @@ function makeHopper(root) {
   root.userData.shells = [body, wing];
 }
 
+function makeMantis(root) {
+  const green = mat(0x6a9a3a, { roughness: 0.48 });
+  const lime = mat(0xc8d86a, { roughness: 0.42 });
+  const dark = mat(0x3d5a22, { roughness: 0.5 });
+  const abdomen = addShadow(new THREE.Mesh(new THREE.SphereGeometry(0.2, 16, 12), green));
+  abdomen.scale.set(0.72, 0.62, 2.15);
+  abdomen.position.set(0, 0.7, -0.22);
+  root.add(abdomen);
+  const thorax = addShadow(new THREE.Mesh(new THREE.SphereGeometry(0.2, 14, 12), lime));
+  thorax.scale.set(0.9, 0.72, 1.05);
+  thorax.position.set(0, 0.76, 0.22);
+  root.add(thorax);
+  const head = addShadow(new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.28, 8), green));
+  head.position.set(0, 0.86, 0.46);
+  head.rotation.x = -0.55;
+  root.add(head);
+  for (const s of [-1, 1]) {
+    const upper = addShadow(new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.042, 0.34, 8), green));
+    upper.position.set(s * 0.22, 0.78, 0.32);
+    upper.rotation.z = s * 0.85;
+    upper.rotation.x = 0.45;
+    root.add(upper);
+    const blade = addShadow(new THREE.Mesh(roundBox(0.05, 0.09, 0.38, 2, 0.02), dark));
+    blade.position.set(s * 0.34, 0.62, 0.46);
+    blade.rotation.x = 0.7;
+    blade.rotation.z = s * 0.35;
+    root.add(blade);
+  }
+  bigEyes(root, 0.9, 0.52, 0.16, 0.145);
+  addAntennae(root, { y: 0.98, z: 0.5, spread: 0.05, len: 0.42, color: 0x3d5a22, segments: 3, droop: 0.05, flare: 0.22 });
+  root.userData.shells = [abdomen, thorax];
+}
+
+function makeStag(root) {
+  const brown = mat(0x5a3a22, { roughness: 0.38, metalness: 0.18 });
+  const black = mat(0x1a1410, { roughness: 0.28, metalness: 0.28 });
+  const elytra = addShadow(new THREE.Mesh(new THREE.SphereGeometry(0.42, 20, 16), brown));
+  elytra.scale.set(1.05, 0.62, 1.22);
+  elytra.position.set(0, 0.68, -0.08);
+  root.add(elytra);
+  const suture = addShadow(new THREE.Mesh(roundBox(0.04, 0.06, 0.82, 2, 0.01), black));
+  suture.position.set(0, 0.94, -0.06);
+  root.add(suture);
+  const thorax = addShadow(new THREE.Mesh(new THREE.SphereGeometry(0.26, 16, 12), black));
+  thorax.scale.set(1.12, 0.68, 0.9);
+  thorax.position.set(0, 0.72, 0.28);
+  root.add(thorax);
+  const head = addShadow(new THREE.Mesh(new THREE.SphereGeometry(0.14, 12, 10), black));
+  head.position.set(0, 0.66, 0.48);
+  root.add(head);
+  for (const s of [-1, 1]) {
+    const jaw = addShadow(new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.05, 0.52, 8), black));
+    jaw.position.set(s * 0.1, 0.7, 0.72);
+    jaw.rotation.x = Math.PI / 2 - 0.18;
+    jaw.rotation.z = s * 0.42;
+    root.add(jaw);
+    const tooth = addShadow(new THREE.Mesh(new THREE.ConeGeometry(0.028, 0.1, 6), black));
+    tooth.position.set(s * 0.18, 0.78, 0.92);
+    tooth.rotation.x = 0.9;
+    tooth.rotation.z = s * 0.2;
+    root.add(tooth);
+  }
+  bigEyes(root, 0.76, 0.56, 0.15, 0.13);
+  addAntennae(root, { y: 0.74, z: 0.5, spread: 0.09, len: 0.22, color: 0x1a1410, club: true, droop: -0.05, flare: 0.4 });
+  root.userData.shells = [elytra, thorax];
+}
+
+function makeButterfly(root) {
+  const pink = mat(0xf2a0c8, { roughness: 0.42 });
+  const cream = mat(0xfff0dc, { roughness: 0.4 });
+  const body = addShadow(new THREE.Mesh(new THREE.SphereGeometry(0.12, 12, 10), cream));
+  body.scale.set(0.7, 0.7, 2.4);
+  body.position.set(0, 0.72, -0.04);
+  root.add(body);
+  const thorax = addShadow(new THREE.Mesh(new THREE.SphereGeometry(0.14, 12, 10), pink));
+  thorax.position.set(0, 0.74, 0.2);
+  root.add(thorax);
+  const wingM = mat(0xf2a0c8, { roughness: 0.28, side: THREE.DoubleSide });
+  const rimM = mat(0x6ec4e8, { roughness: 0.3, side: THREE.DoubleSide });
+  const wings = [];
+  for (const s of [-1, 1]) {
+    const front = addShadow(new THREE.Mesh(new THREE.CircleGeometry(0.38, 22), wingM));
+    front.scale.set(1.15, 0.95, 1);
+    front.position.set(s * 0.32, 0.86, 0.08);
+    front.rotation.y = s * 0.35;
+    front.rotation.x = -0.22;
+    front.castShadow = false;
+    front.userData.side = s;
+    root.add(front);
+    wings.push(front);
+    const spot = addShadow(new THREE.Mesh(new THREE.CircleGeometry(0.1, 12), rimM));
+    spot.position.set(s * 0.12, 0.04, 0.01);
+    front.add(spot);
+    const back = addShadow(new THREE.Mesh(new THREE.CircleGeometry(0.28, 18), wingM));
+    back.scale.set(1.05, 0.78, 1);
+    back.position.set(s * 0.26, 0.82, -0.16);
+    back.rotation.y = s * 0.28;
+    back.rotation.x = -0.18;
+    back.castShadow = false;
+    back.userData.side = s;
+    back.userData.back = true;
+    root.add(back);
+    wings.push(back);
+  }
+  bigEyes(root, 0.82, 0.34, 0.12, 0.12);
+  addAntennae(root, { y: 0.84, z: 0.34, spread: 0.04, len: 0.32, color: 0x4a2a38, club: true, droop: -0.2, flare: 0.18 });
+  root.userData.wings = wings;
+  root.userData.shells = [body, thorax];
+}
+
+function makeDragonfly(root) {
+  const teal = mat(0x2f6f8a, { roughness: 0.28, metalness: 0.22 });
+  const rust = mat(0xc45a3a, { roughness: 0.36 });
+  const glass = mat(0xd8f4ff, { transparent: true, opacity: 0.38, roughness: 0.08, metalness: 0.12, side: THREE.DoubleSide });
+  const thorax = addShadow(new THREE.Mesh(new THREE.SphereGeometry(0.18, 14, 12), rust));
+  thorax.scale.set(0.95, 0.82, 1.15);
+  thorax.position.set(0, 0.74, 0.16);
+  root.add(thorax);
+  const abdomen = addShadow(new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.078, 0.92, 10), teal));
+  abdomen.rotation.x = Math.PI / 2;
+  abdomen.position.set(0, 0.7, -0.32);
+  root.add(abdomen);
+  for (const z of [-0.08, -0.28, -0.48, -0.68]) {
+    const ring = addShadow(new THREE.Mesh(new THREE.TorusGeometry(0.07, 0.012, 6, 12), rust));
+    ring.rotation.x = Math.PI / 2;
+    ring.position.set(0, 0.7, z);
+    root.add(ring);
+  }
+  const head = addShadow(new THREE.Mesh(new THREE.SphereGeometry(0.16, 14, 12), teal));
+  head.position.set(0, 0.76, 0.38);
+  root.add(head);
+  const wings = [];
+  for (const s of [-1, 1]) {
+    for (const [z, back] of [
+      [0.12, false],
+      [-0.08, true],
+    ]) {
+      const w = addShadow(new THREE.Mesh(new THREE.PlaneGeometry(0.72, 0.16), glass));
+      w.position.set(s * 0.38, 0.86, z);
+      w.rotation.y = s * 0.12;
+      w.castShadow = false;
+      w.userData.side = s;
+      w.userData.back = back;
+      root.add(w);
+      wings.push(w);
+    }
+  }
+  bigEyes(root, 0.82, 0.46, 0.16, 0.155);
+  addAntennae(root, { y: 0.86, z: 0.44, spread: 0.04, len: 0.12, color: 0x1a3a48, droop: 0.35, flare: 0.15 });
+  root.userData.wings = wings;
+  root.userData.shells = [thorax, abdomen, head];
+}
+
+function makeLocust(root) {
+  const tan = mat(0xc4a24a, { roughness: 0.52 });
+  const olive = mat(0x5a7a32, { roughness: 0.48 });
+  const body = addShadow(new THREE.Mesh(new THREE.SphereGeometry(0.3, 16, 12), tan));
+  body.scale.set(0.78, 0.68, 1.85);
+  body.position.set(0, 0.7, -0.08);
+  root.add(body);
+  const wing = addShadow(new THREE.Mesh(roundBox(0.5, 0.07, 1.05, 3, 0.04), olive));
+  wing.position.set(0, 0.86, -0.1);
+  root.add(wing);
+  const head = addShadow(new THREE.Mesh(new THREE.SphereGeometry(0.2, 14, 12), tan));
+  head.scale.set(1.05, 1.12, 0.78);
+  head.position.set(0, 0.78, 0.48);
+  root.add(head);
+  for (const s of [-1, 1]) {
+    const femur = addShadow(new THREE.Mesh(new THREE.SphereGeometry(0.1, 10, 8), olive));
+    femur.scale.set(0.7, 0.55, 1.6);
+    femur.position.set(s * 0.22, 0.58, -0.18);
+    femur.rotation.z = s * 0.35;
+    root.add(femur);
+    const shin = addShadow(new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.04, 0.42, 8), tan));
+    shin.position.set(s * 0.3, 0.42, 0.02);
+    shin.rotation.x = 0.85;
+    shin.rotation.z = s * 0.2;
+    root.add(shin);
+  }
+  bigEyes(root, 0.9, 0.56, 0.16, 0.135);
+  addAntennae(root, { y: 0.94, z: 0.5, spread: 0.05, len: 0.55, color: 0x8a7a32, segments: 3, droop: 0.18, flare: 0.14 });
+  root.userData.shells = [body, wing];
+}
+
+function makeAnt(root) {
+  const black = mat(0x2a1c16, { roughness: 0.46 });
+  const rust = mat(0xc45a3a, { roughness: 0.42 });
+  const abdomen = addShadow(new THREE.Mesh(new THREE.SphereGeometry(0.22, 14, 12), black));
+  abdomen.scale.set(0.95, 0.82, 1.25);
+  abdomen.position.set(0, 0.62, -0.22);
+  root.add(abdomen);
+  const thorax = addShadow(new THREE.Mesh(new THREE.SphereGeometry(0.16, 12, 10), black));
+  thorax.position.set(0, 0.66, 0.08);
+  root.add(thorax);
+  const head = addShadow(new THREE.Mesh(new THREE.SphereGeometry(0.14, 12, 10), black));
+  head.position.set(0, 0.66, 0.32);
+  root.add(head);
+  const stripe = addShadow(new THREE.Mesh(roundBox(0.18, 0.08, 0.08, 2, 0.02), rust));
+  stripe.position.set(0, 0.78, -0.18);
+  root.add(stripe);
+  for (const s of [-1, 1]) {
+    const jaw = addShadow(new THREE.Mesh(new THREE.ConeGeometry(0.028, 0.12, 6), black));
+    jaw.position.set(s * 0.06, 0.6, 0.44);
+    jaw.rotation.x = 1.05;
+    jaw.rotation.z = s * 0.45;
+    root.add(jaw);
+  }
+  bigEyes(root, 0.76, 0.4, 0.12, 0.11);
+  addAntennae(root, { y: 0.78, z: 0.34, spread: 0.05, len: 0.28, color: 0x1a120c, segments: 3, droop: 0.05, flare: 0.55 });
+  root.userData.shells = [abdomen, thorax, head];
+}
+
+function makeCicada(root) {
+  const olive = mat(0x5a6a3a, { roughness: 0.46 });
+  const cream = mat(0xe8d48a, { roughness: 0.38 });
+  const glass = mat(0xeaf4d8, { transparent: true, opacity: 0.42, roughness: 0.12, side: THREE.DoubleSide });
+  const body = addShadow(new THREE.Mesh(new THREE.SphereGeometry(0.28, 16, 12), olive));
+  body.scale.set(0.95, 0.72, 1.55);
+  body.position.set(0, 0.7, -0.06);
+  root.add(body);
+  const plate = addShadow(new THREE.Mesh(roundBox(0.36, 0.12, 0.28, 2, 0.04), cream));
+  plate.position.set(0, 0.84, 0.18);
+  root.add(plate);
+  const head = addShadow(new THREE.Mesh(new THREE.SphereGeometry(0.18, 12, 10), olive));
+  head.position.set(0, 0.74, 0.4);
+  root.add(head);
+  const wings = [];
+  for (const s of [-1, 1]) {
+    const w = addShadow(new THREE.Mesh(new THREE.PlaneGeometry(0.55, 1.05), glass));
+    w.position.set(s * 0.22, 0.9, -0.08);
+    w.rotation.x = -1.05;
+    w.rotation.z = s * 0.18;
+    w.castShadow = false;
+    w.userData.side = s;
+    root.add(w);
+    wings.push(w);
+  }
+  bigEyes(root, 0.84, 0.48, 0.18, 0.15);
+  addAntennae(root, { y: 0.86, z: 0.48, spread: 0.06, len: 0.16, color: 0x3a4a22, droop: 0.4, flare: 0.2 });
+  root.userData.wings = wings;
+  root.userData.shells = [body, plate];
+}
+
+function makeFirefly(root) {
+  const dark = mat(0x1a2418, { roughness: 0.42 });
+  const glow = mat(0xc8e85a, { roughness: 0.22, emissive: 0x88cc22, emissiveIntensity: 0.85 });
+  const thorax = addShadow(new THREE.Mesh(new THREE.SphereGeometry(0.16, 12, 10), dark));
+  thorax.position.set(0, 0.7, 0.12);
+  root.add(thorax);
+  const abdomen = addShadow(new THREE.Mesh(new THREE.SphereGeometry(0.2, 14, 12), glow));
+  abdomen.scale.set(0.85, 0.72, 1.45);
+  abdomen.position.set(0, 0.66, -0.22);
+  root.add(abdomen);
+  const head = addShadow(new THREE.Mesh(new THREE.SphereGeometry(0.12, 12, 10), dark));
+  head.position.set(0, 0.7, 0.3);
+  root.add(head);
+  const glass = mat(0xd8f0a8, { transparent: true, opacity: 0.32, roughness: 0.1, side: THREE.DoubleSide });
+  const wings = [];
+  for (const s of [-1, 1]) {
+    const w = addShadow(new THREE.Mesh(new THREE.CircleGeometry(0.22, 16), glass));
+    w.scale.set(1.4, 0.55, 1);
+    w.position.set(s * 0.18, 0.84, 0.02);
+    w.rotation.y = s * 0.45;
+    w.castShadow = false;
+    w.userData.side = s;
+    root.add(w);
+    wings.push(w);
+  }
+  bigEyes(root, 0.78, 0.36, 0.11, 0.11);
+  addAntennae(root, { y: 0.8, z: 0.32, spread: 0.04, len: 0.2, color: 0x12180e, droop: 0.25, flare: 0.22 });
+  root.userData.wings = wings;
+  root.userData.shells = [thorax, head];
+  root.userData.glow = [abdomen];
+}
+
 const BUILDERS = {
   beetle: makeBeetle,
   ladybug: makeLadybug,
   bee: makeBee,
   hopper: makeHopper,
+  mantis: makeMantis,
+  stag: makeStag,
+  butterfly: makeButterfly,
+  dragonfly: makeDragonfly,
+  locust: makeLocust,
+  ant: makeAnt,
+  cicada: makeCicada,
+  firefly: makeFirefly,
 };
 
 export function createRacer(id, label, kit = {}) {
@@ -572,7 +863,7 @@ export function createRacer(id, label, kit = {}) {
   const bug = new THREE.Group();
   bug.scale.setScalar(0.7);
   bug.position.set(0, chassis.seatY - 0.08, -0.22);
-  BUILDERS[def.id](bug);
+  (BUILDERS[def.id] || makeBeetle)(bug);
   rider.add(bug);
   addDriveRig(rider, DRIVE[def.id] || DRIVE.beetle, bug, chassis);
   addAccessory(root, kit.accId || kit.accessoryId, layout);
@@ -684,6 +975,12 @@ export function createRacer(id, label, kit = {}) {
     if (bug.userData.shells) {
       for (const s of bug.userData.shells) {
         s.material.emissive?.setRGB(glow * 0.45, glow * (state.ram ? 0.12 : 0.28), 0);
+      }
+    }
+    if (bug.userData.glow) {
+      const pulse = 0.55 + Math.sin(performance.now() * 0.007) * 0.4;
+      for (const g of bug.userData.glow) {
+        if (g.material?.emissiveIntensity != null) g.material.emissiveIntensity = pulse + (state.boost ? 0.35 : 0);
       }
     }
     if (jets) {

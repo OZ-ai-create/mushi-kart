@@ -34,7 +34,7 @@ export const ACHIEVEMENTS = [
   { id: "item-ace", name: "アイテムマスター", desc: "アイテムを4回使い2回当てる", coins: 8, check: (s) => (s.itemsUsed || 0) >= 4 && (s.itemsHit || 0) >= 2 },
   { id: "races-10", name: "常連むし", desc: "レース10回", coins: 12, check: (_s, p) => (p.runs || 0) >= 10 },
   { id: "races-100", name: "100レース", desc: "レース100回", coins: 40, check: (_s, p) => (p.runs || 0) >= 100 },
-  { id: "all-chars", name: "全キャラクター制覇", desc: "4匹すべてで完走する", coins: 18, check: (_s, p) => Object.keys(p.chars || {}).length >= 4 },
+  { id: "all-chars", name: "全キャラクター制覇", desc: "12匹すべてで完走する", coins: 18, check: (_s, p) => Object.keys(p.chars || {}).length >= 12 },
 ];
 
 export const TITLES = [
