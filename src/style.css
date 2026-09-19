@@ -1217,3 +1217,7 @@ body[data-stage="volcano"] {
     height: 52px;
   }
 }
+
+
+.hud-coins{position:absolute;top:calc(94px + var(--safe-t));left:calc(12px + var(--safe-l));z-index:7;padding:7px 12px;border:2px solid rgba(255,255,255,.75);border-radius:999px;background:rgba(30,20,8,.58);color:#ffd54a;font-weight:900;font-size:15px;text-shadow:0 2px 3px #000;pointer-events:none;}
+#btn-share-result{margin:0;}
