@@ -246,7 +246,12 @@ export function createObstacles(scene, track, courseId) {
           if (k.finished || o.hitCD > 0 || k.ramT > 0 || k.ghostT > 0 || k.leapT > 0) continue;
           const dx = k.pos.x - o.mesh.position.x;
           const dz = k.pos.z - o.mesh.position.z;
-          if (dx * dx + dz * dz < o.radius * o.radius) {
+          // キリギリスの大ジャンプ中は、鳥より十分高ければ
+          // 水平距離が重なっていても飛び越せるようにする。
+          const airborneOverBird =
+            kind === "bird" &&
+            k.pos.y > o.mesh.position.y + 0.72;
+          if (!airborneOverBird && dx * dx + dz * dz < o.radius * o.radius) {
             hitKart(k, audio);
             o.hitCD = 0.85;
           }

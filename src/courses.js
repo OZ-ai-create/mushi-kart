@@ -33,6 +33,10 @@ export const COURSES = [
     desc: "長い丘と細い橋。鳥に気をつけて",
     badge: "GARDEN GRAND PRIX",
     laps: 3,
+    shortcuts: [
+      { t: 0.245, side: -1, minLat: 3.7, skip: 0.026, name: "花だん脇" },
+      { t: 0.515, side: 1, minLat: 3.6, skip: 0.032, name: "丘の近道" },
+    ],
     halfWidth: 6.05,
     widthAt: widthProfile(6.05, [
       { at: 0.24, span: 0.07, cut: 2.55 },
@@ -75,6 +79,10 @@ export const COURSES = [
     desc: "砂丘の坂と細い磯。魚が横切るよ",
     badge: "SEA GRAND PRIX",
     laps: 3,
+    shortcuts: [
+      { t: 0.185, side: 1, minLat: 3.8, skip: 0.028, name: "砂丘ショート" },
+      { t: 0.715, side: -1, minLat: 3.9, skip: 0.03, name: "磯の近道" },
+    ],
     halfWidth: 6.35,
     widthAt: widthProfile(6.35, [
       { at: 0.18, span: 0.06, cut: 2.4 },
@@ -118,6 +126,10 @@ export const COURSES = [
     desc: "尾根の細い道と急な坂。炎に気をつけて",
     badge: "VOLCANO GRAND PRIX",
     laps: 3,
+    shortcuts: [
+      { t: 0.305, side: -1, minLat: 3.35, skip: 0.025, name: "火口脇" },
+      { t: 0.885, side: 1, minLat: 3.4, skip: 0.03, name: "溶岩近道" },
+    ],
     halfWidth: 5.65,
     widthAt: widthProfile(5.65, [
       { at: 0.3, span: 0.075, cut: 2.35 },
