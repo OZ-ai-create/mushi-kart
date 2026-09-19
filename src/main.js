@@ -66,6 +66,10 @@ let selectStop = null;
 let lastChar = selected;
 const BEST_KEY = "mushi-kart-best";
 const RECORDS_KEY = "mushi-kart-records";
+const PROFILE_KEY = "mushi-kart-profile";
+function loadProfile(){try{return JSON.parse(localStorage.getItem(PROFILE_KEY)||"{}")||{};}catch{return {};}}
+function saveProfile(p){localStorage.setItem(PROFILE_KEY,JSON.stringify(p));}
+
 const COURSE_IDS = ["garden", "sea", "volcano"];
 
 function emptyCourseRec() {
@@ -565,6 +569,9 @@ function drawHud(h) {
   $("hud-place").textContent = String(h.place);
   $("hud-lap").textContent = `LAP ${h.lap}/${h.laps}`;
   $("hud-time").textContent = fmt(Math.max(0, h.time));
+  let coinHud = $("hud-coins");
+  if (!coinHud) { coinHud=document.createElement("div"); coinHud.id="hud-coins"; coinHud.className="hud-coins"; $("screen-race").appendChild(coinHud); }
+  coinHud.textContent = "🪙 " + (h.coins || 0);
   const best = courseRec(loadRecords()).time?.time;
   $("hud-best").textContent = h.mode === "time" && best ? `ベスト ${fmt(best)}` : "";
   $("item-icon").textContent = h.itemIcon;
@@ -703,11 +710,23 @@ function saveFinish(you, timeMode) {
 
 function showResults(rows) {
   const list = $("result-list");
+  const profile = loadProfile();
+  const earned = game.coinScore || 0;
+  profile.coins = (profile.coins || 0) + earned;
+  profile.runs = (profile.runs || 0) + 1;
+  profile.bestCoins = Math.max(profile.bestCoins || 0, earned);
+  saveProfile(profile);
+  let shareBtn = $("btn-share-result");
+  if (!shareBtn) { shareBtn=document.createElement("button"); shareBtn.id="btn-share-result"; shareBtn.className="btn ghost"; shareBtn.textContent="結果をシェア"; $("screen-result").querySelector(".title-row")?.prepend(shareBtn); }
+  shareBtn.onclick = async () => {
+    const you = rows.find((r)=>r.you); const text = "むしカート 🐞\n" + getCourse(courseId).name + " " + (you?.place || 1) + "位\n🪙 " + earned + "枚\n" + (you?.time!=null ? fmt(you.time) : "DNF");
+    try { if(navigator.share) await navigator.share({title:"むしカート",text}); else await navigator.clipboard?.writeText(text); shareBtn.textContent="コピーしました！"; setTimeout(()=>shareBtn.textContent="結果をシェア",1200); } catch {}
+  };
   list.innerHTML = "";
   const timeMode = game.mode === "time";
   $("result-title").textContent = timeMode ? "タイムアタック" : "CPU対戦 けっか";
   const you = rows.find((r) => r.you);
-  $("result-note").textContent = saveFinish(you, timeMode);
+  $("result-note").textContent = saveFinish(you, timeMode) + `　🪙今回 ${game.coinScore || 0} / 累計 ${loadProfile().coins || 0}`;
   for (const r of rows) {
     const li = document.createElement("li");
     if (r.you) li.classList.add("you");
