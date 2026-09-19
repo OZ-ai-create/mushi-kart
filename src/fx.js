@@ -1,7 +1,7 @@
 import * as THREE from "three";
 
 const _col = new THREE.Color();
-const SPARK = [0xfff6d8, 0x8fd4ff, 0xffc45a, 0xfff4e8];
+const HOT = [0xfff8e6, 0xffe08a, 0xffc24a, 0xff8a28, 0xfff2c4, 0xffd27a];
 
 function discTex(inner = 0.12) {
   const c = document.createElement("canvas");
@@ -60,6 +60,7 @@ function cloud(scene, count, { additive, order, tex, size }) {
     drag: 2,
     grav: 0,
     size: 0.12,
+    floor: 0,
   }));
   return { geo, pos, col, pts, mat, slots };
 }
@@ -70,9 +71,11 @@ export class FxWorld {
     this.mobile = mobile;
     this._disc = discTex(0.1);
     this._soft = discTex(0.28);
-    this.sparks = cloud(scene, mobile ? 220 : 420, { additive: true, order: 8, tex: this._disc, size: 0.28 });
+    this.sparks = cloud(scene, mobile ? 220 : 420, { additive: true, order: 8, tex: this._disc, size: 0.32 });
+    this.drift = cloud(scene, mobile ? 280 : 520, { additive: true, order: 10, tex: this._disc, size: 0.2 });
+    this.embers = cloud(scene, mobile ? 90 : 160, { additive: true, order: 11, tex: this._disc, size: 0.3 });
     this.smoke = cloud(scene, mobile ? 90 : 170, { additive: false, order: 5, tex: this._soft, size: 0.62 });
-    this.glints = cloud(scene, mobile ? 70 : 130, { additive: true, order: 9, tex: this._disc, size: 0.16 });
+    this.glints = cloud(scene, mobile ? 70 : 130, { additive: true, order: 9, tex: this._disc, size: 0.18 });
     this.skids = [];
     this.rings = [];
     this._skidGeo = new THREE.PlaneGeometry(0.13, 0.58);
@@ -95,31 +98,49 @@ export class FxWorld {
     this.glow.scale.set(1.4, 1.4, 1);
     this.glow.renderOrder = 7;
     scene.add(this.glow);
+    this._tireGlow = [0, 1].map(() => {
+      const mat = this._glowMat.clone();
+      mat.opacity = 0;
+      mat.color.setHex(0xffc45a);
+      const s = new THREE.Sprite(mat);
+      s.scale.set(0.85, 0.55, 1);
+      s.renderOrder = 10;
+      s.visible = false;
+      scene.add(s);
+      return s;
+    });
   }
 
-  spawn(cloud, x, y, z, vx, vy, vz, life, color, drag = 2.4, grav = 0, size = 0.12) {
+  spawn(cloud, x, y, z, vx, vy, vz, life, color, drag = 2.4, grav = 0, size = 0.12, floor = 0) {
     const slots = cloud.slots;
+    let p = null;
     for (let i = 0; i < slots.length; i++) {
-      const p = slots[i];
-      if (p.on) continue;
-      p.on = true;
-      p.x = x;
-      p.y = y;
-      p.z = z;
-      p.vx = vx;
-      p.vy = vy;
-      p.vz = vz;
-      p.life = life;
-      p.max = life;
-      _col.setHex(color);
-      p.r = _col.r;
-      p.g = _col.g;
-      p.b = _col.b;
-      p.drag = drag;
-      p.grav = grav;
-      p.size = size;
-      return;
+      if (!slots[i].on) {
+        p = slots[i];
+        break;
+      }
     }
+    if (!p) {
+      cloud._i = ((cloud._i || 0) + 1) % slots.length;
+      p = slots[cloud._i];
+    }
+    p.on = true;
+    p.x = x;
+    p.y = y;
+    p.z = z;
+    p.vx = vx;
+    p.vy = vy;
+    p.vz = vz;
+    p.life = life;
+    p.max = life;
+    _col.setHex(color);
+    p.r = _col.r;
+    p.g = _col.g;
+    p.b = _col.b;
+    p.drag = drag;
+    p.grav = grav;
+    p.size = size;
+    p.floor = floor;
   }
 
   burst(pos, color = 0xffe08a, n = 18) {
@@ -257,6 +278,8 @@ export class FxWorld {
     }
     if (!glowOn) this._glowMat.opacity = Math.max(0, this._glowMat.opacity - dt * 6);
     this._step(this.sparks, dt);
+    this._step(this.drift, dt);
+    this._step(this.embers, dt);
     this._step(this.smoke, dt);
     this._step(this.glints, dt);
     this._fadeSkids(dt);
@@ -274,28 +297,7 @@ export class FxWorld {
     const side = k.driftDir >= 0 ? 1 : -1;
 
     if (k.drifting && k.speed > 8) {
-      const c = SPARK[Math.min(3, stage)] || SPARK[0];
-      const n = Math.round((2.4 + stage * 2.8) * rate);
-      for (let i = 0; i < n; i++) {
-        const inner = i % 3 !== 0;
-        const w = inner ? -side : side;
-        const wx = k.pos.x - sx * 0.58 + rx * w * 0.38;
-        const wz = k.pos.z - cz * 0.58 + rz * w * 0.38;
-        this.spawn(
-          this.sparks,
-          wx + (Math.random() - 0.5) * 0.05,
-          y + Math.random() * 0.06,
-          wz,
-          -sx * 1.2 + rx * w * 1.8 + (Math.random() - 0.5) * 1.8,
-          0.7 + Math.random() * 3.2,
-          -cz * 1.2 + rz * w * 1.8 + (Math.random() - 0.5) * 1.8,
-          0.16 + Math.random() * 0.18,
-          c,
-          2.8,
-          -8.5,
-          0.1 + stage * 0.03 + Math.random() * 0.05
-        );
-      }
+      this._scatterDrift(k, dt, sx, cz, rx, rz, y, stage, rate, side);
       if (k.isPlayer && Math.random() < 0.55) {
         this._skid(k, k.pos.x - sx * 0.62 + rx * -side * 0.34, y, k.pos.z - cz * 0.62 + rz * -side * 0.34);
       }
@@ -315,22 +317,9 @@ export class FxWorld {
           0.38
         );
       }
-      if (stage >= 2 && Math.random() < 0.35 * rate) {
-        this.spawn(
-          this.glints,
-          k.pos.x - sx * 0.5,
-          y + 0.1,
-          k.pos.z - cz * 0.5,
-          (Math.random() - 0.5) * 1.2,
-          2.2,
-          (Math.random() - 0.5) * 1.2,
-          0.22,
-          0xffffff,
-          2,
-          -4,
-          0.04
-        );
-      }
+    } else {
+      k._driftFx = false;
+      if (k.isPlayer) this._hideTireGlow();
     }
 
     if (k.boost > 0 && k.speed > 5) {
@@ -397,6 +386,91 @@ export class FxWorld {
     } else k._hitFx = false;
   }
 
+  _scatterDrift(k, dt, sx, cz, rx, rz, y, stage, rate, side) {
+    const inner = -side;
+    const air = 1;
+    if (!k._driftFx) {
+      k._driftFx = true;
+      for (let i = 0; i < Math.round(22 * rate); i++) this._oneDriftSpark(k, sx, cz, rx, rz, y, stage, inner);
+    }
+    k._sparkAcc = (k._sparkAcc || 0) + dt * (72 + stage * 48) * rate * air;
+    while (k._sparkAcc >= 1) {
+      k._sparkAcc -= 1;
+      const w = Math.random() < 0.74 ? inner : side;
+      this._oneDriftSpark(k, sx, cz, rx, rz, y, stage, w);
+      if (Math.random() < 0.55) this._oneDriftSpark(k, sx, cz, rx, rz, y, stage, w);
+    }
+    if (k.isPlayer) this._tireSparks(k, sx, cz, rx, rz, y, stage, inner);
+  }
+
+  _oneDriftSpark(k, sx, cz, rx, rz, y, stage, w) {
+    const back = 0.7 + Math.random() * 0.12;
+    const px = k.pos.x - sx * back + rx * w * 0.42 + (Math.random() - 0.5) * 0.1;
+    const py = y + 0.04 + Math.random() * 0.08;
+    const pz = k.pos.z - cz * back + rz * w * 0.42 + (Math.random() - 0.5) * 0.1;
+    const spray = 1.35 + stage * 0.35 + Math.random() * 1.8;
+    const out = (4.6 + Math.random() * 5.8) * w;
+    const up = 1.8 + Math.random() * (3.4 + stage * 0.8);
+    const col = HOT[(Math.random() * (4 + Math.min(2, stage))) | 0];
+    const life = 0.16 + Math.random() * 0.18;
+    const floor = k.pos.y + 0.05;
+    const cloud = Math.random() < 0.22 ? this.embers : this.drift;
+    this.spawn(
+      cloud,
+      px,
+      py,
+      pz,
+      -sx * spray + rx * out + (Math.random() - 0.5) * 1.2,
+      up,
+      -cz * spray + rz * out + (Math.random() - 0.5) * 1.2,
+      life,
+      col,
+      2.4,
+      -14 - Math.random() * 8,
+      0.1,
+      floor
+    );
+    if (Math.random() < 0.16 + stage * 0.07) {
+      this.spawn(
+        this.glints,
+        px,
+        py + 0.03,
+        pz,
+        -sx * 0.8 + rx * w * 3.4,
+        2.2 + Math.random() * 1.6,
+        -cz * 0.8 + rz * w * 3.4,
+        0.14,
+        0xffffff,
+        2.4,
+        -5,
+        0.04,
+        floor
+      );
+    }
+  }
+
+  _tireSparks(k, sx, cz, rx, rz, y, stage, inner) {
+    const flick = 0.7 + Math.sin(performance.now() * 0.055) * 0.3;
+    const col = stage >= 3 ? 0xfff4d4 : stage >= 2 ? 0xffc45a : 0xffe08a;
+    for (let i = 0; i < 2; i++) {
+      const w = i === 0 ? inner : -inner;
+      const s = this._tireGlow[i];
+      s.visible = true;
+      s.position.set(k.pos.x - sx * 0.54 + rx * w * 0.4, y + 0.02, k.pos.z - cz * 0.54 + rz * w * 0.4);
+      s.material.color.setHex(col);
+      s.material.opacity = (0.42 + stage * 0.14) * flick * (i === 0 ? 1 : 0.55);
+      const sc = 0.42 + stage * 0.1 + flick * 0.12;
+      s.scale.set(sc * (i === 0 ? 1.05 : 0.72), sc * 0.55, 1);
+    }
+  }
+
+  _hideTireGlow() {
+    for (const s of this._tireGlow) {
+      s.visible = false;
+      s.material.opacity = 0;
+    }
+  }
+
   _skid(k, x, y, z) {
     const cap = this.mobile ? 24 : 52;
     if (this.skids.length >= cap) {
@@ -459,6 +533,13 @@ export class FxWorld {
       p.x += p.vx * dt;
       p.y += p.vy * dt;
       p.z += p.vz * dt;
+      if (p.floor && p.y < p.floor) {
+        p.y = p.floor;
+        if (p.vy < 0) p.vy *= -0.34;
+        p.vx *= 0.58;
+        p.vz *= 0.58;
+        p.life *= 0.78;
+      }
       const fade = Math.min(1, p.life / Math.max(0.04, p.max * 0.38));
       pos[w * 3] = p.x;
       pos[w * 3 + 1] = p.y;
@@ -474,10 +555,14 @@ export class FxWorld {
   }
 
   dispose() {
-    for (const c of [this.sparks, this.smoke, this.glints]) {
+    for (const c of [this.sparks, this.drift, this.embers, this.smoke, this.glints]) {
       this.scene.remove(c.pts);
       c.geo.dispose();
       c.mat.dispose();
+    }
+    for (const s of this._tireGlow ?? []) {
+      this.scene.remove(s);
+      s.material.dispose();
     }
     for (const s of this.skids) {
       this.scene.remove(s.mesh);
