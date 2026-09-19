@@ -4,34 +4,109 @@ import { getCourse } from "./courses.js";
 import { std } from "./gfx.js";
 
 export const ITEM_DEFS = [
-  { id: "honey", name: "ハチミツ", icon: "🍯", weight: 3 },
-  { id: "acorn", name: "どんぐり", icon: "🌰", weight: 3 },
-  { id: "homing", name: "てんとう虫ミサイル", icon: "🐞", weight: 2 },
-  { id: "silk", name: "クモの糸", icon: "🕸️", weight: 2 },
-  { id: "leaf", name: "はっぱ", icon: "🍃", weight: 2 },
-  { id: "gust", name: "かぜ", icon: "💨", weight: 1 },
-  { id: "electric", name: "でんき", icon: "⚡", weight: 2 },
-  { id: "mushroom", name: "きのこ", icon: "🍄", weight: 2 },
-  { id: "ants", name: "アリの大群", icon: "🐜", weight: 2 },
+  { id: "honey", name: "ハチミツ", icon: "🍯", weight: 3, role: "加速", roleId: "boost" },
+  { id: "acorn", name: "どんぐり", icon: "🌰", weight: 3, role: "攻撃", roleId: "attack" },
+  { id: "homing", name: "てんとう虫ミサイル", icon: "🐞", weight: 2, role: "追跡", roleId: "hunt" },
+  { id: "silk", name: "クモの糸", icon: "🕸️", weight: 2, role: "妨害", roleId: "trap" },
+  { id: "leaf", name: "はっぱ", icon: "🍃", weight: 2, role: "防御", roleId: "defend" },
+  { id: "gust", name: "かぜ", icon: "💨", weight: 1, role: "逆転", roleId: "upset" },
+  { id: "electric", name: "でんき", icon: "⚡", weight: 2, role: "逆転", roleId: "upset" },
+  { id: "mushroom", name: "きのこ", icon: "🍄", weight: 2, role: "加速", roleId: "boost" },
+  { id: "ants", name: "アリの大群", icon: "🐜", weight: 2, role: "妨害", roleId: "trap" },
 ];
 
-export function rollItem(place) {
+export function rollItem(place, ctx = {}) {
   const bag = [];
+  const lap = ctx.lap ?? 0;
   for (const it of ITEM_DEFS) {
     let w = it.weight;
-    if (place === 1 && it.id === "gust") w = 0;
-    if (place >= 3 && it.id === "honey") w += 2;
-    if (place === 1 && it.id === "silk") w += 1;
-    if (place === 1 && it.id === "electric") w += 1;
-    if (place >= 3 && it.id === "mushroom") w += 1;
-    if (place >= 3 && it.id === "homing") w += 2;
+    if (place === 1) {
+      if (it.roleId === "upset" || it.roleId === "trap" || it.roleId === "defend") w += 2;
+      if (it.roleId === "boost") w = Math.max(0, w - 2);
+      if (it.id === "gust") w = 0;
+      if (it.id === "electric") w += 1;
+    } else if (place === 2) {
+      if (it.roleId === "attack" || it.roleId === "hunt" || it.roleId === "defend") w += 1;
+    } else {
+      if (it.roleId === "boost" || it.roleId === "hunt" || it.roleId === "upset") w += 2;
+      if (lap >= 2) {
+        if (it.roleId === "upset" || it.roleId === "boost") w += 2;
+      }
+    }
     for (let i = 0; i < w; i++) bag.push(it);
   }
   return bag[Math.floor(Math.random() * bag.length)] ?? ITEM_DEFS[0];
 }
 
+export function bagCount(kart) {
+  return (kart.bag?.[0] ? 1 : 0) + (kart.bag?.[1] ? 1 : 0);
+}
+
+export function bagRoom(kart) {
+  const pending = kart.roulette > 0 ? 1 : 0;
+  return bagCount(kart) + pending < 2;
+}
+
+export function syncItem(kart) {
+  if (!kart.bag) kart.bag = [null, null];
+  if (kart.itemSel !== 0 && kart.itemSel !== 1) kart.itemSel = 0;
+  if (!kart.bag[kart.itemSel] && kart.bag[0]) kart.itemSel = 0;
+  else if (!kart.bag[kart.itemSel] && kart.bag[1]) kart.itemSel = 1;
+  kart.item = kart.bag[kart.itemSel] || kart.bag[0] || kart.bag[1] || null;
+  return kart.item;
+}
+
+export function giveItem(kart, id) {
+  if (!kart.bag) kart.bag = [null, null];
+  if (!kart.bag[0]) kart.bag[0] = id;
+  else if (!kart.bag[1]) kart.bag[1] = id;
+  else return false;
+  syncItem(kart);
+  return true;
+}
+
+export function takeSelected(kart) {
+  if (!kart.bag) kart.bag = [null, null];
+  let i = kart.itemSel === 1 ? 1 : 0;
+  if (!kart.bag[i]) i = kart.bag[0] ? 0 : kart.bag[1] ? 1 : -1;
+  if (i < 0) return null;
+  const id = kart.bag[i];
+  kart.bag[i] = null;
+  if (!kart.bag[0] && kart.bag[1]) {
+    kart.bag[0] = kart.bag[1];
+    kart.bag[1] = null;
+    kart.itemSel = 0;
+  }
+  syncItem(kart);
+  return id;
+}
+
+export function consumeBagId(kart, id) {
+  if (!kart.bag) return false;
+  const i = kart.bag.indexOf(id);
+  if (i < 0) return false;
+  kart.bag[i] = null;
+  if (!kart.bag[0] && kart.bag[1]) {
+    kart.bag[0] = kart.bag[1];
+    kart.bag[1] = null;
+  }
+  syncItem(kart);
+  return true;
+}
+
+export function selectSlot(kart, i) {
+  if (!kart.bag) kart.bag = [null, null];
+  if (i !== 0 && i !== 1) return;
+  if (kart.bag[i]) kart.itemSel = i;
+  syncItem(kart);
+}
+
 export function iconOf(id) {
   return ITEM_DEFS.find((i) => i.id === id)?.icon ?? "？";
+}
+
+export function roleOf(id) {
+  return ITEM_DEFS.find((i) => i.id === id)?.role ?? "";
 }
 
 export class ItemWorld {
@@ -50,9 +125,9 @@ export class ItemWorld {
   }
 
   use(kart, karts, audio) {
-    const id = kart.item;
-    kart.item = null;
+    const id = takeSelected(kart);
     if (!id) return;
+    kart.itemsUsed = (kart.itemsUsed || 0) + 1;
     audio?.use();
     const flashColor = {
       honey: 0xffd54a, acorn: 0x9b6a3d, homing: 0xff4b4b, silk: 0xeaf6ff,
@@ -375,7 +450,11 @@ export class ItemWorld {
       for (const k of karts) {
         if (k === s.owner || k.finished) continue;
         if (k.pos.distanceTo(s.mesh.position) < 1.15) {
-          hitKart(k, audio);
+          if (tryAutoDefend(k, s, audio, this)) {
+            dead = true;
+            break;
+          }
+          hitKart(k, audio, s.owner);
           dead = true;
           break;
         }
@@ -414,7 +493,11 @@ export class ItemWorld {
       for (const k of karts) {
         if (k === s.owner || k.finished) continue;
         if (k.pos.distanceTo(s.mesh.position) < 1.35) {
-          hitKart(k, audio);
+          if (tryAutoDefend(k, s, audio, this)) {
+            dead = true;
+            break;
+          }
+          hitKart(k, audio, s.owner);
           dead = true;
           break;
         }
@@ -574,7 +657,7 @@ export class ItemWorld {
   }
 }
 
-export function hitKart(kart, audio) {
+export function hitKart(kart, audio, owner = null) {
   if (kart.ramT > 0 || kart.ghostT > 0 || kart.leapT > 0 || kart.hitCooldown > 0) return;
   if (kart.shield > 0) {
     kart.shield = 0;
@@ -586,6 +669,22 @@ export function hitKart(kart, audio) {
   kart.speed *= 0.12;
   kart.hitFlash = 0.7;
   kart.boost = 0;
+  if (owner) owner.itemsHit = (owner.itemsHit || 0) + 1;
   audio?.hit();
   if (kart.isPlayer && navigator.vibrate) navigator.vibrate(35);
+}
+
+function tryAutoDefend(kart, shot, audio, world) {
+  if (kart.shield > 0 || kart.ghostT > 0 || kart.ramT > 0) return false;
+  if (!kart.bag?.includes("leaf")) return false;
+  const fx = shot.mesh.position.x - kart.pos.x;
+  const fz = shot.mesh.position.z - kart.pos.z;
+  const back = -Math.sin(kart.yaw) * fx - Math.cos(kart.yaw) * fz;
+  if (back < 0.15) return false;
+  if (!consumeBagId(kart, "leaf")) return false;
+  kart.shield = Math.max(kart.shield, 0.55);
+  kart.hitCooldown = 0.35;
+  world?.burst?.(kart, 0x74e36a);
+  audio?.use?.();
+  return true;
 }

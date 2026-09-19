@@ -30,6 +30,13 @@
         <button type="button" id="btn-stage" class="btn stage-swap">ステージ変更<small id="stage-label">🌿 朝露ガーデン</small></button>
         <canvas id="title-canvas" width="280" height="220"></canvas>
         <button type="button" id="title-best" class="title-best">自己ベスト なし</button>
+        <p id="title-meta" class="title-meta"></p>
+        <p id="daily-chip" class="daily-chip"></p>
+        <div class="diff-row" role="group" aria-label="CPU難易度">
+          <button type="button" class="diff-btn" data-diff="easy">やさしい</button>
+          <button type="button" class="diff-btn on" data-diff="normal">ふつう</button>
+          <button type="button" class="diff-btn" data-diff="hard">きびしい</button>
+        </div>
         <div class="mode-row">
           <button id="btn-time" class="btn primary">タイムアタック</button>
           <button id="btn-cpu" class="btn primary leaf">CPU対戦</button>
@@ -57,7 +64,11 @@
           <li>カートは<strong>じどうで走る</strong>よ</li>
           <li>画面の<strong>左がわを指で左右</strong>にすべらせて曲がる</li>
           <li><strong>ドリフト</strong>は曲がりながら長押し。火花が3段階に光ったら離すと加速するよ。カウントのゴーで押しているとロケットスタートになるよ</li>
-          <li>金色のハチの巣に当たるとアイテムが出る（持っているときは取れない）</li>
+          <li>金色のハチの巣に当たるとアイテムが出る。最大<strong>2個</strong>持てるよ。スロットをタップして使うアイテムを選んでね</li>
+          <li>はっぱは後ろからの攻撃が来ると自動で盾になるよ。温存するか今使うか考えよう</li>
+          <li>コースには<strong>近道・ジャンプ・潮流・溶岩</strong>があるよ。速いけど危ない道と、安全な道を選ぼう</li>
+          <li>3周目は<strong>最終ラップ</strong>。障害物が速くなってBGMも変わるよ</li>
+          <li>CPU対戦はタイトルでやさしい／ふつう／きびしいを選べるよ</li>
           <li>むしごとに<strong>必殺技</strong>が1つあるよ。レース中に<strong>1回だけ</strong>使える。右の必殺ボタン、またはキーボードの <strong>E</strong></li>
           <li>キーボードなら ← → でハンドル、Shift でドリフト、Space でアイテム、E で必殺</li>
         </ul>
@@ -74,20 +85,25 @@
           <li><strong>🌰 どんぐり</strong> … 前に投げて当たったカートを止める</li>
           <li><strong>🐞 てんとう虫ミサイル</strong> … 前方の相手を追跡して追いつき、当たったカートを止める</li>
           <li><strong>🕸️ クモの糸</strong> … うしろに置く。踏むと動けなくなる</li>
-          <li><strong>🍃 はっぱ</strong> … しばらく攻撃を防ぐ盾になる</li>
-          <li><strong>💨 かぜ</strong> … 近くのカートをまとめて吹き飛ばす</li>
-          <li><strong>⚡ でんき</strong> … そのときの1位のカートに落ちて、大きく減速させる</li>
-          <li><strong>🍄 きのこ</strong> … 2.5秒間、大きくスピードアップする</li>
-          <li><strong>🐜 アリの大群</strong> … 前方にアリを5匹ばらまく。踏んだカートを減速させる</li>
+          <li><strong>🍃 はっぱ</strong> … 防御。後ろからの攻撃にも自動で使える</li>
+          <li><strong>💨 かぜ</strong> … 逆転。近くのカートをまとめて吹き飛ばす</li>
+          <li><strong>⚡ でんき</strong> … 逆転。そのときの1位に落ちる</li>
+          <li><strong>🍄 きのこ</strong> … 加速。2.5秒スピードアップ</li>
+          <li><strong>🐜 アリの大群</strong> … 妨害。前方にアリをばらまく</li>
         </ul>
         <button id="btn-howto-back" class="btn primary">もどる</button>
       </section>
       <section id="screen-records" class="screen hidden">
-        <h2>自己ベスト</h2><p id="records-course" class="records-course">朝露ガーデン</p><div id="records-body" class="records-body"></div><button id="btn-records-back" class="btn primary">もどる</button>
+        <h2>自己ベスト</h2><p id="records-course" class="records-course">朝露ガーデン</p><div id="records-body" class="records-body"></div>
+        <h3 class="howto-sub">むし別ベスト</h3><div id="records-chars" class="records-body"></div>
+        <button type="button" id="btn-invite" class="btn ghost">招待リンクをコピー</button>
+        <button id="btn-records-back" class="btn primary">もどる</button>
       </section>
       <section id="screen-select" class="screen hidden">
-        <h2 id="select-title">カートを組もう</h2><p id="select-course" class="select-course">🌿 朝露ガーデン</p><p id="select-mode" class="char-desc"></p><canvas id="select-canvas" width="260" height="200"></canvas><div id="stat-bars" class="stat-bars"></div>
-        <div class="garage-tabs" role="tablist"><button type="button" id="tab-char" class="tab on" data-tab="char">むし</button><button type="button" id="tab-body" class="tab" data-tab="body">ボディ</button><button type="button" id="tab-tire" class="tab" data-tab="tire">タイヤ</button></div>
+        <h2 id="select-title">カートを組もう</h2><p id="select-course" class="select-course">🌿 朝露ガーデン</p>
+        <div id="course-chips" class="course-chips"></div>
+        <p id="select-mode" class="char-desc"></p><p id="select-coins" class="kit-summary"></p><canvas id="select-canvas" width="260" height="200"></canvas><div id="stat-bars" class="stat-bars"></div>
+        <div class="garage-tabs" role="tablist"><button type="button" id="tab-char" class="tab on" data-tab="char">むし</button><button type="button" id="tab-body" class="tab" data-tab="body">ボディ</button><button type="button" id="tab-tire" class="tab" data-tab="tire">タイヤ</button><button type="button" id="tab-acc" class="tab" data-tab="acc">アクセ</button></div>
         <div id="garage-grid" class="char-grid"></div><p id="kit-summary" class="kit-summary"></p><p id="char-desc" class="char-desc"></p>
         <div class="title-row"><button id="btn-race" class="btn primary">レース開始</button><button id="btn-select-title" type="button" class="btn ghost">タイトルへ戻る</button></div>
       </section>
@@ -105,7 +121,7 @@
           <canvas id="minimap" width="140" height="140"></canvas>
         </div>
 
-        <button type="button" id="btn-pause" class="pause-btn">中断</button>
+        <button type="button" id="btn-pause" class="pause-btn">中断<kbd class="key-hint">Esc</kbd></button>
 
         <div id="pause-overlay" class="pause-overlay hidden">
           <h2>中断</h2>
@@ -123,8 +139,18 @@
 
         <ol id="hud-standings" class="standings hidden"></ol>
 
-        <div class="item-slot" id="item-slot">
+        <div id="final-flash" class="final-flash hidden" aria-hidden="true"></div>
+        <div id="tut-card" class="tut-card hidden">
+          <p id="tut-text">カートはじどうで走るよ。左をすべらせて曲がろう</p>
+          <div class="tut-row"><button type="button" id="btn-tut-next" class="btn primary slim">つぎ</button><button type="button" id="btn-tut-skip" class="btn ghost slim">スキップ</button></div>
+        </div>
+        <div class="item-slot" id="item-slot" data-slot="0">
           <span id="item-icon">空</span>
+          <kbd class="key-hint">1</kbd>
+        </div>
+        <div class="item-slot item-slot-b" id="item-slot-b" data-slot="1">
+          <span id="item-icon-b">空</span>
+          <kbd class="key-hint">2</kbd>
         </div>
 
         <div class="item-slot special-slot" id="special-slot">
@@ -137,16 +163,37 @@
         <div class="touch-layer">
           <div id="steer-zone">
             <div id="steer-knob"></div>
+            <kbd class="key-hint steer-keys">A D / ← →</kbd>
           </div>
           <div class="btn-col">
-            <button id="btn-special" class="ctrl special">必殺<small>角突き</small></button>
-            <button id="btn-item" class="ctrl">アイテム</button>
-            <button id="btn-drift" class="ctrl">ドリフト</button>
-            <button id="btn-brake" class="ctrl slim">ブレーキ</button>
+            <button id="btn-special" class="ctrl special">必殺<small id="special-btn-name">角突き</small><kbd class="key-hint">E</kbd></button>
+            <button id="btn-item" class="ctrl">アイテム<kbd class="key-hint">Space</kbd></button>
+            <button id="btn-drift" class="ctrl">ドリフト<kbd class="key-hint">Shift</kbd></button>
+            <button id="btn-brake" class="ctrl slim">ブレーキ<kbd class="key-hint">S</kbd></button>
           </div>
         </div>
       </section>
-      <section id="screen-result" class="screen hidden"><h2 id="result-title">けっかはっぴょう</h2><p id="result-note" class="char-desc"></p><ol id="result-list" class="result-list"></ol><div class="title-row"><button id="btn-retry" class="btn primary">もういちど</button><button id="btn-title" class="btn ghost">タイトルへ</button></div></section>
+      <section id="screen-result" class="screen hidden">
+        <h2 id="result-title">けっかはっぴょう</h2>
+        <canvas id="result-card" class="result-card" width="720" height="400"></canvas>
+        <p id="result-highlight" class="result-highlight"></p>
+        <p id="result-note" class="char-desc"></p>
+        <ul id="result-stats" class="result-stats"></ul>
+        <ol id="result-list" class="result-list"></ol>
+        <div class="cta-stack">
+          <button id="btn-retry" class="btn primary huge">もう一度遊ぶ</button>
+          <div class="title-row">
+            <button type="button" id="btn-share-result" class="btn ghost">結果をシェア</button>
+            <button type="button" id="btn-result-char" class="btn ghost">キャラ変更</button>
+          </div>
+          <div class="title-row">
+            <button type="button" id="btn-result-ta" class="btn ghost">タイムアタック</button>
+            <button type="button" id="btn-result-garage" class="btn ghost">ガレージ</button>
+          </div>
+          <button id="btn-title" class="btn ghost">タイトルへ</button>
+        </div>
+      </section>
+      <div id="ach-toast" class="ach-toast hidden"></div>
       <div id="mix-panel" class="mix-panel hidden"><div class="mix-card"><p class="mix-title">音量</p><div class="mix-row"><span>BGM</span><div class="mix-track" id="mix-bgm"><div class="mix-fill bgm"></div><div class="mix-knob"></div></div><strong id="mix-bgm-val">100</strong></div><div class="mix-row"><span>エンジン</span><div class="mix-track" id="mix-engine"><div class="mix-fill engine"></div><div class="mix-knob"></div></div><strong id="mix-engine-val">100</strong></div><button type="button" id="mix-close" class="btn ghost">とじる</button></div></div>
     </div>
     <script type="module" src="/src/main.js"></script>

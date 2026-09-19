@@ -57,3 +57,11 @@ export const CHARACTERS = [
 export function getCharacter(id) {
   return CHARACTERS.find((c) => c.id === id) ?? CHARACTERS[0];
 }
+
+export function pickCpuRivals(playerId, n = 3) {
+  const others = CHARACTERS.map((c) => c.id).filter((id) => id !== playerId);
+  const start = Math.max(0, CHARACTERS.findIndex((c) => c.id === playerId));
+  const out = [];
+  for (let k = 0; k < n && k < others.length; k++) out.push(others[(start + k) % others.length]);
+  return out;
+}

@@ -296,7 +296,7 @@ export class FxWorld {
     const rate = k.isPlayer ? 1 : 0.38;
     const side = k.driftDir >= 0 ? 1 : -1;
 
-    if (k.drifting && k.speed > 8) {
+    if (k.drifting && k.speed > 2) {
       this._scatterDrift(k, dt, sx, cz, rx, rz, y, stage, rate, side);
       if (k.isPlayer && Math.random() < 0.55) {
         this._skid(k, k.pos.x - sx * 0.62 + rx * -side * 0.34, y, k.pos.z - cz * 0.62 + rz * -side * 0.34);

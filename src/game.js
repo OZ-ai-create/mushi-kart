@@ -1,13 +1,15 @@
 import * as THREE from "three";
-import { CHARACTERS, getCharacter } from "./characters.js";
+import { getCharacter, pickCpuRivals } from "./characters.js";
 import { createRacer } from "./insects.js";
 import { Track, buildWorld } from "./track.js";
 import { Kart, aiInput, bumpKarts } from "./kart.js";
-import { ITEM_DEFS, ItemWorld, rollItem, iconOf } from "./items.js";
+import { ITEM_DEFS, ItemWorld, rollItem, iconOf, bagRoom, giveItem, selectSlot } from "./items.js";
 import { buildLoadout, cpuKit } from "./garage.js";
 import { getCourse } from "./courses.js";
 import { activateSpecial, aiWantsSpecial, applyRamHits, getSpecial } from "./specials.js";
 import { FxWorld } from "./fx.js";
+import { getDifficulty } from "./session.js";
+import { loadGhost } from "./progress.js";
 
 const LAPS = 3;
 const _look = new THREE.Vector3();
@@ -66,6 +68,7 @@ export class Game {
     this.garage = garage;
     const course = getCourse(courseId);
     this.courseId = course.id;
+    this.diff = getDifficulty(garage.difficulty || "normal");
     this.elapsed = 0;
     this.phase = "countdown";
     this.countT = 0;
@@ -75,6 +78,12 @@ export class Game {
     this.coins = [];
     this.coinScore = 0;
     this.shortcutCd = 0;
+    this.finalLap = false;
+    this._camPunch = 0;
+    this._lastPlace = 4;
+    this.ghostSamples = [];
+    this._ghostStamp = 0;
+    this.ghostMesh = null;
 
     this._wipeScene();
     this._camReady = false;
@@ -107,20 +116,21 @@ export class Game {
     const world = buildWorld(this.scene, this.track);
     this.itemBoxes = world.itemBoxes;
     this.boostPads = world.boostPads;
+    this.gizmos = world.gizmos ?? [];
     this.obstacles = world.obstacles;
     this._buildRaceCoins();
     this.items = new ItemWorld(this.scene);
     this.fx = new FxWorld(this.scene, this.mobile);
     this.items.fx = this.fx;
 
-    const others = CHARACTERS.map((c) => c.id).filter((id) => id !== playerId);
+    const others = this.mode === "cpu" ? pickCpuRivals(playerId, 3) : [];
     const order = this.mode === "cpu" ? [...others, playerId] : [playerId];
     this.karts = order.map((id, i) => {
       const isPlayer = id === playerId && (this.mode === "time" || i === order.length - 1);
       const kit = isPlayer
-        ? { bodyId: garage.bodyId, tireId: garage.tireId }
+        ? { bodyId: garage.bodyId, tireId: garage.tireId, accId: garage.accId }
         : cpuKit(id);
-      const stats = buildLoadout(id, kit.bodyId, kit.tireId);
+      const stats = buildLoadout(id, kit.bodyId, kit.tireId, kit.accId);
       const mesh = createRacer(id, isPlayer ? null : `${stats.emoji} ${stats.name}`, kit);
       this.scene.add(mesh);
       const kart = new Kart({
@@ -129,6 +139,7 @@ export class Game {
         isPlayer,
         name: stats.name,
       });
+      if (!isPlayer) kart.speedMul = this.diff.speedMul;
       const col = i % 2 === 0 ? -1.2 : 1.2;
       const row = Math.floor(i / 2);
       const t = (1 - 0.02 * (row + 1) + 1) % 1;
@@ -137,6 +148,7 @@ export class Game {
       return kart;
     });
     this.player = this.karts.find((k) => k.isPlayer) ?? this.karts[0];
+    this._setupGhost();
 
     this._snapCamera(true);
     this._followSun();
@@ -155,9 +167,17 @@ export class Game {
     if (this.phase !== "racing") return;
     const spec = activateSpecial(kart, { track: this.track, items: this.items, audio: this.audio });
     if (!spec) return;
-    const color = spec.id === "horn" ? 0xff6b35 : spec.id === "leap" ? 0x86b36a : spec.id === "lucky" ? 0xff8fab : 0xffe066;
+    const color =
+      spec.id === "horn"
+        ? 0xff6b35
+        : spec.id === "leap"
+          ? 0x86b36a
+          : spec.id === "lucky"
+            ? 0xff8fab
+            : 0xffe066;
     this.items?.burst?.(kart, color);
     this.fx?.burst?.(kart.pos, color, 22);
+    this._camPunch = Math.max(this._camPunch, 0.28);
     if (kart.isPlayer) this.hooks?.onBanner(spec.banner);
   }
 
@@ -214,43 +234,59 @@ export class Game {
         this.phase = "racing";
         const rocket = !!this.input?.sample()?.drift;
         for (const k of this.karts) {
-          const cpuRocket = !k.isPlayer && Math.random() < 0.42;
+          const cpuRocket = !k.isPlayer && Math.random() < this.diff.rocket;
           const go = k.isPlayer ? rocket : cpuRocket;
           if (go) {
             k.boost = Math.max(k.boost, 1.28);
             k.speed = Math.max(k.speed, k.stats.maxSpeed * 0.78);
             k.boostBurst = true;
+            k.rocket = "good";
           } else {
             k.boost = Math.max(k.boost, 0.28);
             k.speed = Math.max(k.speed, k.stats.maxSpeed * 0.26);
+            k.rocket = "miss";
           }
           k.slipstreamT = 0;
         }
-        if (rocket) this.hooks?.onBanner("ロケットスタート！");
-        this.audio?.boost();
+        if (rocket) {
+          this.audio?.rocket?.();
+          this.hooks?.onBanner("ロケットスタート！");
+        } else {
+          this.audio?.boost();
+        }
       }
       return;
     }
 
     this.elapsed += dt;
-    this.shortcutCd = Math.max(0, this.shortcutCd - dt);
+    if (this._camPunch > 0) this._camPunch = Math.max(0, this._camPunch - dt);
     const player = this.player;
-    const gapBase = player.progress;
+    if (player.isPlayer) player.speedMul = 1 + Math.min(0.035, this.coinScore * 0.0022);
+    if (!this.finalLap && player.lap >= 2 && this.phase === "racing") {
+      this.finalLap = true;
+      this._camPunch = 0.45;
+      this.audio?.finalLap?.();
+      this.hooks?.onBanner("FINAL LAP！ 最終ラップ！");
+      this.hooks?.onFinalLap?.();
+    }
 
     for (const kart of this.karts) {
       if (!kart.isPlayer) {
-        const gap = gapBase - kart.progress;
-        kart.speedMul = 1 + THREE.MathUtils.clamp(gap * 0.4, -0.14, 0.36);
+        const gap = player.progress - kart.progress;
+        kart.speedMul = this.diff.speedMul * (1 + THREE.MathUtils.clamp(gap * 0.22, -0.08, 0.18));
         kart.aiTimer += dt;
-        if (kart.aiTimer > 2.4) {
+        if (kart.aiTimer > 2.4 / this.diff.react) {
           kart.aiOffset = THREE.MathUtils.clamp(kart.aiOffset + (Math.random() - 0.5) * 0.9, -2.0, 2.0);
           kart.aiTimer = 0;
         }
+        this._aiSeekShortcut(kart);
       }
 
       let input;
       if (kart.isPlayer) {
         input = this.input?.sample() ?? { steer: 0, drift: false, brake: false };
+        const sel = this.input?.consumeSelect?.();
+        if (sel === 0 || sel === 1) selectSlot(kart, sel);
         const itemTap = !!this.input?.consumeItem();
         const usedItem = !!(itemTap && kart.item && kart.roulette <= 0);
         if (usedItem) this.items.use(kart, this.karts, this.audio);
@@ -260,18 +296,24 @@ export class Game {
       } else {
         input = aiInput(kart, this.track, this.karts, this.obstacles?.list ?? []);
         kart.aiItemT = (kart.aiItemT || 0) + dt;
-        if (kart.item && kart.roulette <= 0 && kart.aiItemT > 2.2) {
+        if (kart.item && kart.roulette <= 0 && kart.aiItemT > this.diff.itemDelay) {
           this.items.use(kart, this.karts, this.audio);
           kart.aiItemT = 0;
         }
         if (aiWantsSpecial(kart, this.karts, this.obstacles?.list ?? [], this.track)) this._trySpecial(kart);
       }
+      const hopWas = kart.hop;
       kart.update(dt, input, this.track);
-      if (kart.wantsBoostSfx && kart.isPlayer) this.audio?.boost();
+      if (kart.wantsBoostSfx && kart.isPlayer) {
+        if (this.audio?.turbo) this.audio.turbo();
+        else this.audio?.boost();
+      }
+      if (kart.isPlayer && hopWas > 0.2 && kart.justLanded) this.audio?.land?.();
       this._pickups(kart);
       this._boostPads(kart);
       this._collectCoins(kart);
       this._tryShortcut(kart);
+      this._applyGizmos(kart);
 
       if (!kart.finished && kart.lap >= LAPS) {
         kart.finished = true;
@@ -280,6 +322,7 @@ export class Game {
         if (kart.isPlayer) {
           this.phase = "finish";
           this.audio?.finish();
+          this._camPunch = 0.5;
           this.hooks?.onBanner("フィニッシュ！");
         }
       }
@@ -292,13 +335,31 @@ export class Game {
     for (const kart of this.karts) kart.snapToTrack(this.track, true);
     this._updateSlipstream(dt);
     this.items.update(dt, this.karts, this.audio, this.track);
-    this.obstacles?.update(dt, this.karts, this.audio, true);
+    const pace = this.finalLap ? 1.28 : 1;
+    this.obstacles?.update(dt, this.karts, this.audio, true, pace);
     this.fx?.update(dt, this.karts, this.courseId);
+    this._stepGhost(dt);
 
     const live = this.karts.filter((k) => !k.finished).sort((a, b) => b.progress - a.progress);
     live.forEach((k, i) => {
       k.place = this.karts.filter((x) => x.finished).length + i + 1;
     });
+    if (player.place < this._lastPlace) {
+      this.audio?.placeUp?.();
+      this.hooks?.onBanner(`${player.place}位へ！`);
+    }
+    this._lastPlace = player.place;
+
+    if (this.mode === "time" && this.phase === "racing" && this.elapsed - this._ghostStamp > 1 / 12) {
+      this._ghostStamp = this.elapsed;
+      this.ghostSamples.push({
+        at: this.elapsed,
+        t: player.t,
+        lat: player.lateral,
+        yaw: player.yaw,
+        lap: player.lap,
+      });
+    }
 
     this.audio?.setEngine(player.speed / player.stats.maxSpeed, this.phase !== "countdown");
     this._snapCamera(false, dt);
@@ -373,16 +434,15 @@ export class Game {
 
   _pickups(kart) {
     if (kart.finished) return;
-    const full = !!(kart.item || kart.roulette > 0);
+    if (!bagRoom(kart)) return;
     for (const box of this.itemBoxes) {
       if (box.cooldown > 0 || !box.mesh.visible) continue;
       if (!this._hitsBox(kart, box)) continue;
-      if (full) continue;
       box.cooldown = 3.6;
       box.mesh.visible = false;
       kart.roulette = 1.85;
-      const got = rollItem(kart.place);
-      kart.item = got.id;
+      const got = rollItem(kart.place, { lap: kart.lap });
+      giveItem(kart, got.id);
       kart.rouletteShow = got;
       kart.aiItemT = 0;
       if (kart.isPlayer) this.audio?.collect();
@@ -428,20 +488,169 @@ export class Game {
   }
 
   _tryShortcut(kart) {
-    if (kart.finished || this.shortcutCd > 0) return;
+    if (kart.finished || kart.shortcutCd > 0) return;
     const course = getCourse(this.courseId);
     for (const s of course.shortcuts ?? []) {
       const d = Math.min(Math.abs(kart.t - s.t), 1 - Math.abs(kart.t - s.t));
       if (d * this.track.length < 4.5 && Math.abs(kart.lateral) > s.minLat && Math.sign(kart.lateral) === s.side) {
+        if (s.risk === "lava" || s.risk === "burn") {
+          if (kart.leapT <= 0 && kart.hop < 0.35) {
+            kart.speed *= 0.58;
+            kart.stun = Math.max(kart.stun, 0.38);
+            kart.hitFlash = Math.max(kart.hitFlash, 0.4);
+            if (kart.isPlayer) this.audio?.hit?.();
+          }
+        }
         kart.t = (kart.t + s.skip + 1) % 1;
         kart.lateral *= 0.72;
-        this.shortcutCd = 1.2;
+        kart.shortcutCd = 1.15;
+        kart.shortcuts = (kart.shortcuts || 0) + 1;
         if (kart.isPlayer) {
+          this.audio?.shortcut?.();
+          this._camPunch = Math.max(this._camPunch, 0.18);
           this.hooks?.onBanner?.("ショートカット！ " + s.name);
         }
         break;
       }
     }
+  }
+
+  _aiSeekShortcut(kart) {
+    if (this.diff.cutChance < 0.2) return;
+    kart._cutSeekT = (kart._cutSeekT || 0) - 0.016;
+    if (kart._cutSeekT > 0) return;
+    const course = getCourse(this.courseId);
+    for (const s of course.shortcuts ?? []) {
+      let ahead = s.t - kart.t;
+      ahead = ((ahead % 1) + 1) % 1;
+      const dist = ahead * this.track.length;
+      if (dist < 2 || dist > 16) continue;
+      const risky = s.risk === "lava" || s.risk === "burn" || s.risk === "bird";
+      if (risky && this.diff.id === "easy") continue;
+      if (Math.random() > this.diff.cutChance) continue;
+      const hw = this.track.halfWidthAt(kart.t);
+      kart.aiOffset = s.side * Math.min(hw - 0.75, s.minLat + 0.15);
+      kart._cutSeekT = 1.1;
+      break;
+    }
+  }
+
+  _inGizmo(kart, g) {
+    const d = Math.min(Math.abs(kart.t - g.t), 1 - Math.abs(kart.t - g.t));
+    if (d > (g.span || 0.03)) return false;
+    if (g.side) {
+      if (Math.sign(kart.lateral) !== g.side) return false;
+      if (Math.abs(kart.lateral) < (g.minLat || 0)) return false;
+    } else if (g.w) {
+      if (Math.abs(kart.lateral) > g.w) return false;
+    }
+    return true;
+  }
+
+  _applyGizmos(kart) {
+    if (kart.finished) return;
+    for (const g of getCourse(this.courseId).gizmos ?? []) {
+      if (!this._inGizmo(kart, g)) continue;
+      if (g.type === "current") {
+        kart.speed += (g.pull || 8) * 0.016;
+        kart.boost = Math.max(kart.boost, 0.18);
+      } else if (g.type === "sand") {
+        kart.speed *= Math.pow(g.drag || 0.75, 0.08);
+      } else if (g.type === "flower" || g.type === "boost") {
+        if (kart.gizmoCd <= 0) {
+          kart.boost = Math.max(kart.boost, g.boost || 0.7);
+          kart.boostBurst = true;
+          kart.gizmoCd = 0.8;
+          if (kart.isPlayer && g.name) this.hooks?.onBanner?.(g.name);
+        }
+      } else if (g.type === "jump" || g.type === "wave") {
+        if (kart.gizmoCd <= 0 && kart.speed > 10) {
+          kart.hop = Math.max(kart.hop, g.hop || 0.7);
+          if (g.skip) kart.t = (kart.t + g.skip + 1) % 1;
+          kart.gizmoCd = 1.1;
+          if (kart.isPlayer) {
+            this.audio?.jump?.();
+            if (g.name) this.hooks?.onBanner?.(g.name);
+          }
+        }
+      } else if (g.type === "lava") {
+        if (kart.gizmoCd <= 0) {
+          kart.t = (kart.t + (g.skip || 0.02) + 1) % 1;
+          kart.gizmoCd = 1.1;
+          if (kart.leapT <= 0 && kart.hop < 0.4) {
+            kart.speed *= 0.55;
+            kart.stun = Math.max(kart.stun, 0.42);
+            kart.hitFlash = 0.45;
+            if (kart.isPlayer) this.audio?.hit?.();
+          }
+          kart.shortcuts = (kart.shortcuts || 0) + 1;
+          if (kart.isPlayer && g.name) this.hooks?.onBanner?.(g.name);
+        }
+      } else if (g.type === "ember") {
+        if (kart.leapT <= 0 && kart.hop < 0.3 && Math.random() < (this.finalLap ? 0.08 : 0.035)) {
+          kart.speed *= 0.84;
+          kart.hitFlash = Math.max(kart.hitFlash, 0.2);
+        }
+      }
+    }
+  }
+
+  _setupGhost() {
+    if (this.mode !== "time") return;
+    const rec = loadGhost(this.courseId);
+    if (!rec) return;
+    this._ghostReplay = rec;
+    const kit = { bodyId: rec.bodyId || "leaf", tireId: rec.tireId || "slick", accId: rec.accId || "none" };
+    const mesh = createRacer(rec.charId || "beetle", "ゴースト", kit);
+    mesh.traverse((o) => {
+      if (!o.isMesh || !o.material) return;
+      const mats = Array.isArray(o.material) ? o.material : [o.material];
+      for (const m of mats) {
+        m.transparent = true;
+        m.opacity = Math.min(0.38, m.opacity ?? 1);
+        m.depthWrite = false;
+      }
+      o.castShadow = false;
+    });
+    this.scene.add(mesh);
+    this.ghostMesh = mesh;
+  }
+
+  _stepGhost() {
+    const rec = this._ghostReplay;
+    const mesh = this.ghostMesh;
+    if (!rec || !mesh) return;
+    const samples = rec.samples;
+    if (!samples?.length) return;
+    const t = this.elapsed;
+    if (t <= samples[0].at) {
+      this._poseGhost(samples[0]);
+      return;
+    }
+    if (t >= samples[samples.length - 1].at) {
+      mesh.visible = false;
+      return;
+    }
+    mesh.visible = true;
+    let i = 1;
+    while (i < samples.length && samples[i].at < t) i += 1;
+    const a = samples[i - 1];
+    const b = samples[i];
+    const u = (t - a.at) / Math.max(1e-4, b.at - a.at);
+    this._poseGhost({
+      t: a.t + (((b.t - a.t + 1.5) % 1) - 0.5) * u,
+      lat: a.lat + (b.lat - a.lat) * u,
+      yaw: a.yaw + (b.yaw - a.yaw) * u,
+    });
+  }
+
+  _poseGhost(s) {
+    if (!this.ghostMesh) return;
+    const f = this.track.at(((s.t % 1) + 1) % 1);
+    this.ghostMesh.position.copy(f.point).addScaledVector(f.binormal, s.lat || 0);
+    this.ghostMesh.position.y += 0.08;
+    this.ghostMesh.rotation.y = s.yaw || 0;
+    this.ghostMesh.userData.update?.(0.016, { speed: 16, steer: 0, boost: false });
   }
 
   _boostPads(kart) {
@@ -496,9 +705,10 @@ export class Game {
     if (p.stun > 0) {
       this.camera.position.x += (Math.random() - 0.5) * 0.2;
       this.camera.position.y += (Math.random() - 0.5) * 0.1;
-    } else if (boosting) {
-      this.camera.position.x += (Math.random() - 0.5) * 0.02;
-      this.camera.position.y += (Math.random() - 0.5) * 0.01;
+    } else if (boosting || this._camPunch > 0) {
+      const n = this._camPunch > 0 ? 0.12 : 0.02;
+      this.camera.position.x += (Math.random() - 0.5) * n;
+      this.camera.position.y += (Math.random() - 0.5) * n * 0.5;
     }
     this.camera.up.set(0, 1, 0);
     this.camera.lookAt(this._lookSmooth);
@@ -519,11 +729,8 @@ export class Game {
   _hud() {
     const p = this.player;
     const roulette = p.roulette > 0;
-    const icon = roulette
-      ? ITEM_DEFS[Math.floor(performance.now() / 80) % ITEM_DEFS.length].icon
-      : p.item
-        ? iconOf(p.item)
-        : "空";
+    const spinIcon = ITEM_DEFS[Math.floor(performance.now() / 80) % ITEM_DEFS.length].icon;
+    const slotIcon = (id, spinning) => (spinning ? spinIcon : id ? iconOf(id) : "空");
     return {
       mode: this.mode,
       coins: this.coinScore,
@@ -531,7 +738,12 @@ export class Game {
       lap: Math.min(LAPS, p.lap + 1),
       laps: LAPS,
       time: this.elapsed,
-      itemIcon: icon,
+      itemIcon: slotIcon(p.bag?.[p.itemSel] || p.item, roulette && !p.bag?.[1]),
+      items: [
+        { icon: slotIcon(p.bag?.[0], roulette && !p.bag?.[0]), id: p.bag?.[0] || null, on: p.itemSel === 0 },
+        { icon: slotIcon(p.bag?.[1], roulette && !!p.bag?.[0] && !p.bag?.[1]), id: p.bag?.[1] || null, on: p.itemSel === 1 },
+      ],
+      finalLap: this.finalLap,
       countdown: this.phase === "countdown" ? this.countShown : -1,
       startHint: this.phase === "countdown" && this.countShown > 0,
       standings: [...this.karts]
@@ -591,7 +803,8 @@ export class Game {
   }
 
   _results() {
-    return [...this.karts]
+    const p = this.player;
+    const rows = [...this.karts]
       .sort((a, b) => {
         if (a.finished && b.finished) return a.finishTime - b.finishTime;
         if (a.finished) return -1;
@@ -605,6 +818,38 @@ export class Game {
         time: k.finished ? k.finishTime : null,
         emoji: getCharacter(k.stats.id).emoji,
       }));
+    const you = rows.find((r) => r.you);
+    return {
+      rows,
+      mode: this.mode,
+      courseId: this.courseId,
+      kit: {
+        charId: p.stats.id,
+        bodyId: p.stats.bodyId,
+        tireId: p.stats.tireId,
+        accId: p.stats.accId,
+        bodyName: p.stats.bodyName,
+        tireName: p.stats.tireName,
+        accName: p.stats.accName,
+        emoji: p.stats.emoji,
+        name: p.stats.name,
+      },
+      stats: {
+        finished: !!p.finished,
+        place: you?.place ?? p.place,
+        time: you?.time ?? null,
+        coins: this.coinScore,
+        maxSpeed: p.maxSpeedHit || 0,
+        drifts: p.drifts || 0,
+        turbos: p.turbos || 0,
+        shortcuts: p.shortcuts || 0,
+        itemsUsed: p.itemsUsed || 0,
+        itemsHit: p.itemsHit || 0,
+        bestLap: p.bestLap,
+        rocket: p.rocket || "miss",
+        ghostSamples: this.ghostSamples,
+      },
+    };
   }
 
   stop(clearScene = true) {

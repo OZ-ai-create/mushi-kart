@@ -42,6 +42,8 @@ export class Kart {
     this.finishTime = 0;
     this.place = 1;
     this.item = null;
+    this.bag = [null, null];
+    this.itemSel = 0;
     this.roulette = 0;
     this.rouletteShow = null;
     this.aiOffset = (Math.random() - 0.5) * 2.2;
@@ -63,6 +65,17 @@ export class Kart {
     this._walled = false;
     this._itemDriftLock = 0;
     this._driftRelease = 0;
+    this.drifts = 0;
+    this.turbos = 0;
+    this.shortcuts = 0;
+    this.itemsUsed = 0;
+    this.itemsHit = 0;
+    this.maxSpeedHit = 0;
+    this.bestLap = null;
+    this.lapClock = 0;
+    this.shortcutCd = 0;
+    this.gizmoCd = 0;
+    this.rocket = "miss";
   }
 
   spawn(track, t, lateral) {
@@ -85,6 +98,8 @@ export class Kart {
     this.justLanded = false;
     this._walled = false;
     this.item = null;
+    this.bag = [null, null];
+    this.itemSel = 0;
     this.roulette = 0;
     this._pitch = 0;
     this.specialUsed = false;
@@ -94,6 +109,17 @@ export class Kart {
     this.leapT = 0;
     this.leapMax = 0;
     this._ramHit = null;
+    this.drifts = 0;
+    this.turbos = 0;
+    this.shortcuts = 0;
+    this.itemsUsed = 0;
+    this.itemsHit = 0;
+    this.maxSpeedHit = 0;
+    this.bestLap = null;
+    this.lapClock = 0;
+    this.shortcutCd = 0;
+    this.gizmoCd = 0;
+    this.rocket = "miss";
     this.mesh.position.copy(this.pos);
     this.mesh.rotation.set(0, this.yaw, 0);
   }
@@ -105,6 +131,7 @@ export class Kart {
     this.hop = Math.max(this.hop, 0.18);
     this.wantsBoostSfx = true;
     this.boostBurst = true;
+    this.turbos = (this.turbos || 0) + 1;
   }
 
   snapToTrack(track, fromWorld = false) {
@@ -116,7 +143,7 @@ export class Kart {
     const f = track.at(this.t);
     const wall = track.halfWidthAt(this.t) + 0.28;
     this.lateral = THREE.MathUtils.clamp(this.lateral, -wall, wall);
-    const hopY = Math.sin(Math.max(0, this.hop) * Math.PI) * (this.leapT > 0 ? 3.1 : 0.5);
+    const hopY = Math.sin(Math.max(0, this.hop) * Math.PI) * (this.leapT > 0 ? 3.1 : 0.5) * (this.stats.jumpBonus || 1);
     this.pos.copy(f.point).addScaledVector(f.binormal, this.lateral);
     this.pos.y = f.point.y + 0.08 + hopY;
   }
@@ -125,6 +152,10 @@ export class Kart {
     this.lastPos.copy(this.pos);
     this.wantsBoostSfx = false;
     this.justLanded = false;
+    if (this.shortcutCd > 0) this.shortcutCd -= dt;
+    if (this.gizmoCd > 0) this.gizmoCd -= dt;
+    this.lapClock += dt;
+    if (this.speed > (this.maxSpeedHit || 0)) this.maxSpeedHit = this.speed;
     const hopBefore = this.hop;
     if (this.hitFlash > 0) this.hitFlash -= dt;
     if (this.hitCooldown > 0) this.hitCooldown -= dt;
@@ -162,18 +193,21 @@ export class Kart {
     if (input.usedItem || input.usedSpecial || input.itemTap) this._itemDriftLock = 0.4;
     if (this._itemDriftLock > 0) this._itemDriftLock -= dt;
     const holdDrift = !!(input.drift || this._itemDriftLock > 0);
-    const keepDrift = this.drifting && holdDrift && !this.finished && this.speed > 6;
-    const startDrift = !this.finished && this.speed > 9 && input.drift && Math.abs(steer) > 0.12;
+    const keepDrift = this.drifting && holdDrift && !this.finished && this.speed > 1.2;
+    const startDrift = !this.finished && input.drift && this.speed > 1.2;
     if (keepDrift || startDrift) {
       if (!this.drifting) {
         this.drifting = true;
+        this.drifts = (this.drifts || 0) + 1;
         this.driftDir = Math.sign(steer) || this.driftDir || 1;
         this.driftHold = 0;
         this.driftTurboGiven = false;
         this.driftBoostLevel = 0;
-        this.hop = 0.42;
+        this.hop = 0.52;
         this._driftRelease = 0;
         this._driftInward = 0;
+      } else if (this.driftHold < 0.22 && Math.abs(steer) > 0.1) {
+        this.driftDir = Math.sign(steer);
       }
       this.driftHold += dt * (this.stats.driftBonus || 1);
       this.driftStage = this.driftHold >= 2.2 ? 3 : this.driftHold >= 1.1 ? 2 : this.driftHold >= 0.45 ? 1 : 0;
@@ -291,6 +325,8 @@ export class Kart {
       if (this.t > 0.42 && this.t < 0.72) this._passedMid = true;
       if (this._lastT > 0.8 && this.t < 0.2 && this._passedMid) {
         this.lap += 1;
+        if (this.bestLap == null || this.lapClock < this.bestLap) this.bestLap = this.lapClock;
+        this.lapClock = 0;
         this._passedMid = false;
       }
     }

@@ -407,10 +407,11 @@ export function buildWorld(scene, track) {
   else scatterGarden(scene, track);
   const itemBoxes = placeItemBoxes(scene, track);
   const boostPads = placeBoostPads(scene, track);
+  const gizmos = placeGizmos(scene, track);
   addPollen(scene, course.pollen);
   const obstacles = createObstacles(scene, track, course.id);
 
-  return { itemBoxes, boostPads, obstacles };
+  return { itemBoxes, boostPads, gizmos, obstacles };
 }
 
 function occupied(track, x, z) {
@@ -602,7 +603,7 @@ function honeycombMesh() {
 }
 
 function placeItemBoxes(scene, track) {
-  const stations = [0.16, 0.37, 0.61, 0.83];
+  const stations = track.course.itemStations ?? [0.16, 0.37, 0.61, 0.83];
   const boxes = [];
   for (const t of stations) {
     const hw = track.halfWidthAt(t);
@@ -621,7 +622,7 @@ function placeItemBoxes(scene, track) {
 
 function placeBoostPads(scene, track) {
   const pads = [];
-  for (const t of [0.5, 0.96]) {
+  for (const t of track.course.boostPads ?? [0.5, 0.96]) {
     const f = track.at(t);
     const mesh = new THREE.Mesh(
       new THREE.PlaneGeometry(3.6, 2.2),
@@ -633,6 +634,53 @@ function placeBoostPads(scene, track) {
     pads.push({ t, mesh });
   }
   return pads;
+}
+
+function gizmoColor(type) {
+  if (type === "current") return 0x3ad0ff;
+  if (type === "sand") return 0xe6d2a4;
+  if (type === "lava" || type === "ember") return 0xff6a2a;
+  if (type === "jump" || type === "boost") return 0xffc14d;
+  if (type === "flower") return 0xff8fab;
+  if (type === "wave") return 0x9ee7ff;
+  if (type === "leaf") return 0x6fbf63;
+  return 0xffe08a;
+}
+
+function placeGizmos(scene, track) {
+  const list = [];
+  const defs = track.course.gizmos ?? [];
+  for (const g of defs) {
+    const f = track.at(g.t);
+    const hw = track.halfWidthAt(g.t);
+    const w = g.w ?? (g.minLat != null ? Math.max(1.4, hw - (g.minLat || 0) + 0.4) : 3.2);
+    const col = gizmoColor(g.type);
+    const mesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(w, Math.max(2.4, (g.span || 0.03) * track.length * 0.45)),
+      std(col, { emissive: col, emissiveIntensity: 0.42, side: THREE.DoubleSide, roughness: 0.45, transparent: true, opacity: 0.72 })
+    );
+    let lat = 0;
+    if (g.side) lat = g.side * Math.min(hw - 0.8, (g.minLat || 2.2) + 0.4);
+    mesh.position.copy(f.point).addScaledVector(f.binormal, lat);
+    mesh.position.y = f.point.y + 0.16;
+    mesh.rotation.x = -Math.PI / 2;
+    mesh.rotation.z = Math.atan2(f.tangent.x, f.tangent.z);
+    scene.add(mesh);
+    list.push({ ...g, mesh, lat });
+  }
+  for (const s of track.course.shortcuts ?? []) {
+    const f = track.at(s.t);
+    const hw = track.halfWidthAt(s.t);
+    const chev = new THREE.Mesh(
+      new THREE.ConeGeometry(0.28, 0.7, 3),
+      std(0x86b36a, { emissive: 0x335522, emissiveIntensity: 0.35 })
+    );
+    chev.position.copy(f.point).addScaledVector(f.binormal, s.side * Math.min(hw - 0.35, s.minLat * 0.92));
+    chev.position.y = f.point.y + 0.55;
+    chev.rotation.z = s.side > 0 ? -0.6 : 0.6;
+    scene.add(chev);
+  }
+  return list;
 }
 
 function addPollen(scene, color = 0xfff2b0) {

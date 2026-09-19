@@ -415,6 +415,57 @@ export class AudioBus {
     });
   }
 
+  rocket() {
+    this._osc("sawtooth", 180, 0.22, 0.1, 420);
+    this._osc("triangle", 520, 0.18, 0.08, 260);
+    this._osc("square", 880, 0.12, 0.06);
+  }
+
+  turbo() {
+    this.boost();
+    this._osc("sine", 740, 0.1, 0.05, 180);
+  }
+
+  jump() {
+    this._osc("sine", 420, 0.12, 0.07, 280);
+    this._osc("triangle", 660, 0.16, 0.05, 120);
+  }
+
+  land() {
+    this._osc("square", 90, 0.1, 0.08, -30);
+  }
+
+  shortcut() {
+    this._osc("triangle", 640, 0.12, 0.08, 200);
+    this._osc("sine", 980, 0.16, 0.05);
+  }
+
+  finalLap() {
+    this._osc("square", 392, 0.16, 0.12);
+    this._osc("square", 523, 0.2, 0.12);
+    setTimeout(() => this._osc("square", 784, 0.28, 0.14), 110);
+    if (this.mode === "race" && this._theme) {
+      window.clearTimeout(this._musicTimer);
+      this._armLoop(this._theme.raceBpm * 1.18, this._raceStep);
+    }
+  }
+
+  placeUp() {
+    this._osc("triangle", 880, 0.1, 0.07);
+    this._osc("sine", 1174, 0.14, 0.05);
+  }
+
+  best() {
+    [659, 784, 988, 1318].forEach((f, i) => {
+      setTimeout(() => this._osc("triangle", f, 0.18, 0.08), i * 90);
+    });
+  }
+
+  ach() {
+    this._osc("sine", 784, 0.12, 0.08);
+    this._osc("triangle", 1046, 0.18, 0.07);
+  }
+
   _chirp() {
     const t = this._now();
     const o = this.ctx.createOscillator();

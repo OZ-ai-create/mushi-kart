@@ -575,6 +575,7 @@ export function createRacer(id, label, kit = {}) {
   BUILDERS[def.id](bug);
   rider.add(bug);
   addDriveRig(rider, DRIVE[def.id] || DRIVE.beetle, bug, chassis);
+  addAccessory(root, kit.accId || kit.accessoryId, layout);
   root.add(rider);
   root.userData.rider = rider;
   root.userData.bug = bug;
@@ -714,14 +715,43 @@ export function createRacer(id, label, kit = {}) {
   return root;
 }
 
+function addAccessory(root, accId, layout) {
+  if (!accId || accId === "none") return;
+  const deck = layout.deck;
+  if (accId === "flag") {
+    const pole = addShadow(new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.55, 8), mat(0x6b4423)));
+    pole.position.set(0.22, deck + 0.42, -0.62);
+    root.add(pole);
+    const cloth = addShadow(new THREE.Mesh(roundBox(0.28, 0.16, 0.04, 2, 0.02), mat(0xe07a5f, { roughness: 0.5 })));
+    cloth.position.set(0.34, deck + 0.58, -0.62);
+    root.add(cloth);
+  } else if (accId === "lantern") {
+    const lamp = addShadow(
+      new THREE.Mesh(new THREE.SphereGeometry(0.12, 12, 10), mat(0xff9f43, { emissive: 0xff6a00, emissiveIntensity: 0.55, roughness: 0.35 }))
+    );
+    lamp.position.set(-0.22, deck + 0.38, -0.58);
+    root.add(lamp);
+  } else if (accId === "wing") {
+    const wingM = mat(0xd8f0ff, { transparent: true, opacity: 0.55, roughness: 0.2, side: THREE.DoubleSide });
+    for (const s of [-1, 1]) {
+      const w = addShadow(new THREE.Mesh(new THREE.CircleGeometry(0.22, 16), wingM));
+      w.position.set(s * 0.38, deck + 0.22, -0.42);
+      w.rotation.y = s * 0.7;
+      w.rotation.x = -0.35;
+      w.castShadow = false;
+      root.add(w);
+    }
+  }
+}
+
 export function kitKey(kit) {
-  if (typeof kit === "string") return `${kit}|leaf|slick`;
-  return `${kit.charId}|${kit.bodyId || "leaf"}|${kit.tireId || "slick"}`;
+  if (typeof kit === "string") return `${kit}|leaf|slick|none`;
+  return `${kit.charId}|${kit.bodyId || "leaf"}|${kit.tireId || "slick"}|${kit.accId || "none"}`;
 }
 
 function kitOf(kit) {
-  if (typeof kit === "string") return { charId: kit, bodyId: "leaf", tireId: "slick" };
-  return { charId: kit.charId, bodyId: kit.bodyId || "leaf", tireId: kit.tireId || "slick" };
+  if (typeof kit === "string") return { charId: kit, bodyId: "leaf", tireId: "slick", accId: "none" };
+  return { charId: kit.charId, bodyId: kit.bodyId || "leaf", tireId: kit.tireId || "slick", accId: kit.accId || "none" };
 }
 
 export function createPreviewLoop(canvas, getKit) {

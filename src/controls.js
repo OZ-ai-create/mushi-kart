@@ -6,6 +6,7 @@ export class Input {
     this.gyroOn = false;
     this._itemQueued = false;
     this._specialQueued = false;
+    this._selectQueued = null;
     this._touchSteer = 0;
     this._gyroSteer = 0;
     this._orientDeg = null;
@@ -129,6 +130,8 @@ export class Input {
         e.preventDefault();
         this._itemQueued = true;
       }
+      if (e.code === "Digit1" || e.code === "KeyQ") this._selectQueued = 0;
+      if (e.code === "Digit2" || e.code === "KeyW") this._selectQueued = 1;
       if (e.code === "KeyE") {
         e.preventDefault();
         this._specialQueued = true;
@@ -241,6 +244,16 @@ export class Input {
     if (!this._specialQueued) return false;
     this._specialQueued = false;
     return true;
+  }
+
+  consumeSelect() {
+    const v = this._selectQueued;
+    this._selectQueued = null;
+    return v;
+  }
+
+  queueSelect(i) {
+    this._selectQueued = i;
   }
 
   async enableGyro(on) {

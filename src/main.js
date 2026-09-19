@@ -4,9 +4,24 @@ import { createPreviewLoop } from "./insects.js";
 import { AudioBus } from "./audio.js";
 import { Input } from "./controls.js";
 import { Game } from "./game.js";
-import { BODIES, TIRES, buildLoadout, loadGarage, saveGarage, loadLastRun, saveLastRun, statBars, getBody, getTire } from "./garage.js";
+import { BODIES, TIRES, ACCESSORIES, buildLoadout, loadGarage, saveGarage, loadLastRun, saveLastRun, statBars, getBody, getTire, getAccessory } from "./garage.js";
 import { COURSES, getCourse } from "./courses.js";
 import { getSpecial } from "./specials.js";
+import {
+  loadProfile,
+  saveProfile,
+  applyRace,
+  compareLast,
+  shareText,
+  dailyFor,
+  todayKey,
+  isUnlocked,
+  tryUnlock,
+  unlockCost,
+  currentTitle,
+  saveGhost,
+} from "./progress.js";
+import { loadDifficulty, saveDifficulty, inviteUrl, parseInvite } from "./session.js";
 
 const $ = (id) => document.getElementById(id);
 const screens = {
@@ -51,6 +66,10 @@ const game = new Game($("game-canvas"), audio, {
     }, 1600);
   },
   onRaceEnd: showResults,
+  onFinalLap: () => {
+    $("final-flash")?.classList.remove("hidden");
+    setTimeout(() => $("final-flash")?.classList.add("hidden"), 2200);
+  },
 });
 game.setInput(input);
 
@@ -58,17 +77,19 @@ const savedGarage = loadGarage();
 let selected = savedGarage.charId;
 let bodyId = savedGarage.bodyId;
 let tireId = savedGarage.tireId;
+let accId = savedGarage.accId || "none";
 let courseId = savedGarage.courseId ?? "garden";
 let garageTab = "char";
 let playMode = "cpu";
+let difficulty = loadDifficulty();
 let titleStop = createPreviewLoop($("title-canvas"), titleKit);
 let selectStop = null;
 let lastChar = selected;
+let lastPayload = null;
+let tutStep = 0;
+let tutActive = false;
 const BEST_KEY = "mushi-kart-best";
 const RECORDS_KEY = "mushi-kart-records";
-const PROFILE_KEY = "mushi-kart-profile";
-function loadProfile(){try{return JSON.parse(localStorage.getItem(PROFILE_KEY)||"{}")||{};}catch{return {};}}
-function saveProfile(p){localStorage.setItem(PROFILE_KEY,JSON.stringify(p));}
 
 const COURSE_IDS = ["garden", "sea", "volcano"];
 
@@ -134,8 +155,8 @@ function paintTitleBest() {
 }
 
 function titleKit() {
-  const last = loadLastRun() || { charId: selected, bodyId, tireId };
-  return { charId: last.charId, bodyId: last.bodyId, tireId: last.tireId };
+  const last = loadLastRun() || { charId: selected, bodyId, tireId, accId };
+  return { charId: last.charId, bodyId: last.bodyId, tireId: last.tireId, accId: last.accId || accId };
 }
 
 function paintLastRun() {
@@ -191,6 +212,19 @@ function paintTitle() {
   paintTitleBest();
   paintLastRun();
   paintGyroBtn();
+  paintDiff();
+  const p = loadProfile();
+  const title = currentTitle(p);
+  const daily = dailyFor(todayKey());
+  const done = p.dailyDone?.[todayKey()];
+  $("title-meta").textContent = `${title.name}　🪙 ${p.coins || 0}　連続 ${p.streak || 0}日`;
+  $("daily-chip").textContent = done ? `今日の課題クリア：${daily.desc}` : `今日の課題：${daily.desc}（+${daily.reward}）`;
+}
+
+function paintDiff() {
+  for (const btn of document.querySelectorAll(".diff-btn")) {
+    btn.classList.toggle("on", btn.dataset.diff === difficulty);
+  }
 }
 
 function applyLastRun() {
@@ -200,6 +234,7 @@ function applyLastRun() {
   lastChar = last.charId;
   bodyId = last.bodyId;
   tireId = last.tireId;
+  accId = last.accId || accId;
   courseId = last.courseId ?? courseId;
   playMode = last.mode;
   persistGarage();
@@ -440,26 +475,35 @@ function openRecords() {
   }
 
   $("records-body").innerHTML = `${timeCard}<div class="record-card"><h3>CPU対戦</h3>${cpuInner}</div>`;
+  const p = loadProfile();
+  const ranks = p.charBest?.[courseId] || {};
+  const lines = CHARACTERS.map((c) => {
+    const t = ranks[`time:${c.id}`];
+    const cpu = ranks[`cpu:${c.id}`];
+    if (!t && !cpu) return "";
+    return `<div class="record-card"><h3>${c.emoji} ${c.name}</h3>${t ? `<div class="record-row"><span>TA</span><strong>${fmt(t.time)}</strong></div>` : ""}${cpu ? `<div class="record-row"><span>CPU</span><strong>${fmt(cpu.time)}</strong></div>` : ""}</div>`;
+  }).filter(Boolean);
+  $("records-chars").innerHTML = lines.join("") || `<div class="record-card"><p class="record-empty">まだむし別の記録がないよ</p></div>`;
   show("records");
 }
 
 function persistGarage() {
-  saveGarage({ charId: selected, bodyId, tireId, courseId });
+  saveGarage({ charId: selected, bodyId, tireId, accId, courseId });
 }
 
 function currentKit() {
-  return { charId: selected, bodyId, tireId };
+  return { charId: selected, bodyId, tireId, accId };
 }
 
 function paintStats() {
-  const bars = statBars(buildLoadout(selected, bodyId, tireId));
+  const bars = statBars(buildLoadout(selected, bodyId, tireId, accId));
   $("stat-bars").innerHTML = bars
     .map(
       (s) =>
         `<div class="stat-row"><span>${s.name}</span><div class="stat-track"><div class="stat-fill" style="width:${s.value}%"></div></div></div>`
     )
     .join("");
-  $("kit-summary").textContent = `${getBody(bodyId).name} ＋ ${getTire(tireId).name}`;
+  $("kit-summary").textContent = `${getBody(bodyId).name} ＋ ${getTire(tireId).name} ＋ ${getAccessory(accId).name}`;
 }
 
 function setGarageTab(tab) {
@@ -467,13 +511,15 @@ function setGarageTab(tab) {
   for (const btn of document.querySelectorAll(".garage-tabs .tab")) {
     btn.classList.toggle("on", btn.dataset.tab === tab);
   }
-  $("select-title").textContent = tab === "char" ? "だれで走る？" : tab === "body" ? "ボディを選ぶ" : "タイヤを選ぶ";
+  $("select-title").textContent =
+    tab === "char" ? "だれで走る？" : tab === "body" ? "ボディを選ぶ" : tab === "tire" ? "タイヤを選ぶ" : "アクセサリー";
   paintGarageGrid();
 }
 
 function paintGarageGrid() {
   const grid = $("garage-grid");
   grid.innerHTML = "";
+  const profile = loadProfile();
   if (garageTab === "char") {
     for (const c of CHARACTERS) {
       const b = document.createElement("button");
@@ -492,15 +538,35 @@ function paintGarageGrid() {
     $("char-desc").textContent = CHARACTERS.find((c) => c.id === selected).desc;
     return;
   }
-  const parts = garageTab === "body" ? BODIES : TIRES;
-  const current = garageTab === "body" ? bodyId : tireId;
+  const kind = garageTab === "body" ? "bodies" : garageTab === "tire" ? "tires" : "accessories";
+  const parts = garageTab === "body" ? BODIES : garageTab === "tire" ? TIRES : ACCESSORIES;
+  const current = garageTab === "body" ? bodyId : garageTab === "tire" ? tireId : accId;
   for (const p of parts) {
+    const unlocked = isUnlocked(profile, kind, p.id);
+    const cost = unlockCost(kind, p.id);
     const b = document.createElement("button");
-    b.className = "char-card" + (p.id === current ? " selected" : "");
-    b.innerHTML = `${p.emoji} ${p.name}<small>${p.tag}</small>`;
+    b.className = "char-card" + (p.id === current ? " selected" : "") + (unlocked ? "" : " locked");
+    b.innerHTML = unlocked
+      ? `${p.emoji} ${p.name}<small>${p.tag}</small>`
+      : `${p.emoji} ${p.name}<small>${p.tag}</small><span class="cost">🪙 ${cost}で解放</span>`;
     b.addEventListener("click", () => {
+      if (!unlocked) {
+        const res = tryUnlock(loadProfile(), kind, p.id);
+        if (!res.ok) {
+          $("char-desc").textContent = `コインが足りないよ（${cost}必要）`;
+          return;
+        }
+        audio.ach();
+        toastAch(`解放：${p.name}`);
+        persistGarage();
+        paintStats();
+        paintGarageGrid();
+        paintTitle();
+        return;
+      }
       if (garageTab === "body") bodyId = p.id;
-      else tireId = p.id;
+      else if (garageTab === "tire") tireId = p.id;
+      else accId = p.id;
       persistGarage();
       paintStats();
       paintGarageGrid();
@@ -508,7 +574,7 @@ function paintGarageGrid() {
     });
     grid.appendChild(b);
   }
-  $("char-desc").textContent = parts.find((p) => p.id === current).desc;
+  $("char-desc").textContent = parts.find((p) => p.id === current)?.desc || "";
 }
 
 function openSelect() {
@@ -522,35 +588,58 @@ function openSelect() {
       : "タイムアタック";
   } else {
     $("select-mode").textContent =
-      rec.cpu?.place != null ? `CPU 3台と対戦　自己ベスト ${rec.cpu.place}位` : "CPU 3台と対戦";
+      rec.cpu?.place != null ? `CPU 3台と対戦　自己ベスト ${rec.cpu.place}位　難易度 ${difficulty}` : `CPU 3台と対戦　難易度 ${difficulty}`;
   }
+  $("select-coins").textContent = `所持コイン 🪙 ${loadProfile().coins || 0}`;
   $("btn-race").textContent = playMode === "time" ? "記録に挑戦" : "レース開始";
+  paintCourseChips();
   setGarageTab("char");
   paintStats();
   selectStop?.();
   selectStop = createPreviewLoop($("select-canvas"), currentKit);
 }
 
+function paintCourseChips() {
+  const el = $("course-chips");
+  if (!el) return;
+  el.innerHTML = "";
+  for (const c of COURSES) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "course-chip" + (c.id === courseId ? " on" : "");
+    b.textContent = `${c.emoji} ${c.name}`;
+    b.addEventListener("click", () => {
+      courseId = c.id;
+      persistGarage();
+      paintStage();
+      $("select-course").textContent = `${c.emoji} ${c.name}　3周`;
+      paintCourseChips();
+      openSelect();
+    });
+    el.appendChild(b);
+  }
+}
+
 function startRace() {
   persistGarage();
-  saveLastRun({ mode: playMode, charId: selected, bodyId, tireId, courseId });
+  saveLastRun({ mode: playMode, charId: selected, bodyId, tireId, accId, courseId });
   closeMix();
   closePause();
   $("race-banner").textContent = "";
   $("countdown").textContent = "";
   $("start-hint")?.classList.add("hidden");
   $("enemy-warn").classList.add("hidden");
+  $("final-flash")?.classList.add("hidden");
   const spec = getSpecial(selected);
   $("special-icon").textContent = spec.icon;
   $("special-name").textContent = spec.name;
   $("special-slot").classList.remove("spent");
-  $("btn-special").innerHTML = `必殺<small>${spec.name}</small>`;
-  $("btn-special").classList.remove("spent");
-  $("btn-special").disabled = false;
+  paintSpecialBtn(spec.name, true);
   show("race");
   game.resize();
+  beginTutorial();
   try {
-    game.start(selected, playMode, { bodyId, tireId }, courseId);
+    game.start(selected, playMode, { bodyId, tireId, accId, difficulty }, courseId);
   } catch (err) {
     console.error(err);
     goToTitle();
@@ -561,6 +650,15 @@ function fmt(t) {
   const m = Math.floor(t / 60);
   const s = t - m * 60;
   return `${m}:${s.toFixed(3).padStart(6, "0")}`;
+}
+
+function paintSpecialBtn(name, ready) {
+  const btn = $("btn-special");
+  const label = $("special-btn-name");
+  if (label) label.textContent = name;
+  else btn.innerHTML = `必殺<small id="special-btn-name">${name}</small><kbd class="key-hint">E</kbd>`;
+  btn.classList.toggle("spent", !ready);
+  btn.disabled = !ready;
 }
 
 function drawHud(h) {
@@ -576,15 +674,20 @@ function drawHud(h) {
   const best = courseRec(loadRecords()).time?.time;
   $("hud-best").textContent = h.mode === "time" && best ? `ベスト ${fmt(best)}` : "";
   $("item-icon").textContent = h.itemIcon;
+  const items = h.items || [{ icon: h.itemIcon, on: true }, { icon: "空", on: false }];
+  $("item-icon").textContent = items[0]?.icon || h.itemIcon || "空";
+  const b = $("item-icon-b");
+  if (b) b.textContent = items[1]?.icon || "空";
+  $("item-slot")?.classList.toggle("on", !!items[0]?.on);
+  $("item-slot-b")?.classList.toggle("on", !!items[1]?.on);
+  $("hud-lap")?.classList.toggle("final", !!h.finalLap);
+  advanceTutorial(h);
   const spec = h.special;
   if (spec) {
     $("special-icon").textContent = spec.icon;
     $("special-name").textContent = spec.ready ? spec.name : "使用済";
     $("special-slot").classList.toggle("spent", !spec.ready);
-    const btn = $("btn-special");
-    btn.innerHTML = spec.ready ? `必殺<small>${spec.name}</small>` : `必殺<small>使用済</small>`;
-    btn.classList.toggle("spent", !spec.ready);
-    btn.disabled = !spec.ready;
+    paintSpecialBtn(spec.ready ? spec.name : "使用済", spec.ready);
   }
   const warn = $("enemy-warn");
   if (h.threat?.label) {
@@ -663,24 +766,35 @@ function drawMinimap(h) {
   ctx.restore();
 }
 
-function saveFinish(you, timeMode) {
-  if (!you) return "";
+function saveFinish(you, timeMode, stats) {
+  if (!you) return { note: "", bestUpdate: false };
   const rec = loadRecords();
   const slot = courseRec(rec, game.courseId || courseId);
   const now = Date.now();
   if (timeMode) {
-    if (you.time == null) return "";
+    if (you.time == null) return { note: "", bestUpdate: false };
     const prev = slot.time?.time;
     if (!prev || you.time < prev) {
-      slot.time = { time: you.time, charId: selected, at: now };
+      slot.time = { time: you.time, charId: selected, at: now, lap: stats?.bestLap ?? null };
       saveRecords(rec);
       paintTitleBest();
-      return "自己ベスト更新！";
+      if (stats?.ghostSamples?.length) {
+        saveGhost(game.courseId || courseId, {
+          time: you.time,
+          charId: selected,
+          bodyId,
+          tireId,
+          accId,
+          samples: stats.ghostSamples,
+        });
+      }
+      return { note: "自己ベスト更新！", bestUpdate: true, prev };
     }
-    return `自己ベスト ${fmt(prev)}`;
+    return { note: `自己ベスト ${fmt(prev)}`, bestUpdate: false, prev };
   }
 
   const notes = [];
+  let bestUpdate = false;
   if (!slot.cpu) {
     slot.cpu = {
       place: you.place,
@@ -691,44 +805,85 @@ function saveFinish(you, timeMode) {
       bestTimeAt: now,
     };
     saveRecords(rec);
-    return you.place != null ? "記録に残したよ" : "";
+    return { note: you.place != null ? "記録に残したよ" : "", bestUpdate: you.place === 1 };
   }
   if (you.place != null && you.place < slot.cpu.place) {
     slot.cpu.place = you.place;
     slot.cpu.charId = selected;
     slot.cpu.at = now;
     notes.push("最高順位更新！");
+    bestUpdate = true;
   }
   if (you.time != null && (slot.cpu.bestTime == null || you.time < slot.cpu.bestTime)) {
     slot.cpu.bestTime = you.time;
     slot.cpu.bestTimeCharId = selected;
     slot.cpu.bestTimeAt = now;
     notes.push("最速タイム更新！");
+    bestUpdate = true;
   }
   if (notes.length) saveRecords(rec);
   else if (slot.cpu.place != null) notes.push(`自己ベスト ${slot.cpu.place}位`);
-  return notes.join("　");
+  return { note: notes.join("　"), bestUpdate, prev: slot.cpu.bestTime };
 }
 
-function showResults(rows) {
+function showResults(payload) {
+  const rows = payload?.rows || payload;
+  const stats = payload?.stats || {};
+  const kit = payload?.kit || { charId: selected, emoji: "🐞", name: "", bodyName: getBody(bodyId).name, tireName: getTire(tireId).name };
+  lastPayload = payload;
   const list = $("result-list");
-  const profile = loadProfile();
-  const earned = game.coinScore || 0;
-  profile.coins = (profile.coins || 0) + earned;
-  profile.runs = (profile.runs || 0) + 1;
-  profile.bestCoins = Math.max(profile.bestCoins || 0, earned);
-  saveProfile(profile);
-  let shareBtn = $("btn-share-result");
-  if (!shareBtn) { shareBtn=document.createElement("button"); shareBtn.id="btn-share-result"; shareBtn.className="btn ghost"; shareBtn.textContent="結果をシェア"; $("screen-result").querySelector(".title-row")?.prepend(shareBtn); }
-  shareBtn.onclick = async () => {
-    const you = rows.find((r)=>r.you); const text = "むしカート 🐞\n" + getCourse(courseId).name + " " + (you?.place || 1) + "位\n🪙 " + earned + "枚\n" + (you?.time!=null ? fmt(you.time) : "DNF");
-    try { if(navigator.share) await navigator.share({title:"むしカート",text}); else await navigator.clipboard?.writeText(text); shareBtn.textContent="コピーしました！"; setTimeout(()=>shareBtn.textContent="結果をシェア",1200); } catch {}
-  };
-  list.innerHTML = "";
-  const timeMode = game.mode === "time";
-  $("result-title").textContent = timeMode ? "タイムアタック" : "CPU対戦 けっか";
+  const timeMode = (payload?.mode || game.mode) === "time";
   const you = rows.find((r) => r.you);
-  $("result-note").textContent = saveFinish(you, timeMode) + `　🪙今回 ${game.coinScore || 0} / 累計 ${loadProfile().coins || 0}`;
+  const finish = saveFinish(you, timeMode, stats);
+  const summary = {
+    mode: timeMode ? "time" : "cpu",
+    courseId: payload?.courseId || courseId,
+    charId: selected,
+    finished: !!stats.finished,
+    place: you?.place ?? stats.place,
+    time: you?.time ?? stats.time ?? null,
+    coins: stats.coins || 0,
+    turbos: stats.turbos || 0,
+    drifts: stats.drifts || 0,
+    shortcuts: stats.shortcuts || 0,
+    itemsUsed: stats.itemsUsed || 0,
+    itemsHit: stats.itemsHit || 0,
+    rocket: stats.rocket || "miss",
+    bestUpdate: finish.bestUpdate,
+  };
+  const before = loadProfile();
+  const delta = compareLast(before, summary);
+  const applied = applyRace(before, summary);
+
+  $("result-title").textContent = timeMode ? "タイムアタック" : "CPU対戦 けっか";
+  const highs = [];
+  if (finish.bestUpdate) highs.push("自己ベスト更新！");
+  if (delta != null && delta > 0.05) highs.push(`前回より +${delta.toFixed(2)}秒`);
+  if ((stats.shortcuts || 0) > 0) highs.push(`ショートカット成功 ${stats.shortcuts}回`);
+  if ((stats.turbos || 0) > 0) highs.push(`ターボ${stats.turbos}回成功`);
+  $("result-highlight").textContent = highs.join("　") || applied.notes[0] || "";
+  $("result-note").textContent = `${finish.note}　🪙今回 ${stats.coins || 0} / 累計 ${applied.profile.coins || 0}`;
+  if (applied.newAchs?.length) {
+    for (const a of applied.newAchs) toastAch(`実績：${a.name}`);
+    audio.ach?.();
+  } else if (finish.bestUpdate) audio.best?.();
+
+  $("result-stats").innerHTML = [
+    ["順位", you?.place != null ? `${you.place}位` : "-"],
+    ["タイム", you?.time != null ? fmt(you.time) : "DNF"],
+    ["コイン", String(stats.coins || 0)],
+    ["最高速度", `${Math.round(stats.maxSpeed || 0)}`],
+    ["むし", `${kit.emoji || ""} ${kit.name || ""}`],
+    ["ビルド", `${kit.bodyName || ""} / ${kit.tireName || ""}`],
+    ["アイテム", `${stats.itemsUsed || 0}使用 / ${stats.itemsHit || 0}命中`],
+    ["ドリフト", `${stats.drifts || 0} / ターボ ${stats.turbos || 0}`],
+    ["近道", String(stats.shortcuts || 0)],
+    ["ベストラップ", stats.bestLap != null ? fmt(stats.bestLap) : "-"],
+  ]
+    .map(([k, v]) => `<li><span>${k}</span><strong>${v}</strong></li>`)
+    .join("");
+
+  list.innerHTML = "";
   for (const r of rows) {
     const li = document.createElement("li");
     if (r.you) li.classList.add("you");
@@ -737,6 +892,9 @@ function showResults(rows) {
     li.innerHTML = `<span>${r.place}位 ${r.emoji} ${r.name}${extra}</span><span>${t}</span>`;
     list.appendChild(li);
   }
+  drawResultCard({ rows, you, stats, kit, course: getCourse(courseId), bestUpdate: finish.bestUpdate, timeMode });
+  bindShare({ summary: { ...summary, delta, bestUpdate: finish.bestUpdate }, course: getCourse(courseId) });
+  endTutorial(true);
   show("result");
   audio.playTitle(courseId);
 }
@@ -753,6 +911,8 @@ window.addEventListener("orientationchange", () => setTimeout(() => game.resize(
 document.addEventListener("pointerdown", unlock, { once: true });
 
 const isPhone = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+document.body.classList.toggle("pc", !isPhone);
+document.body.classList.toggle("touch", isPhone);
 if (import.meta.env.DEV && !isPhone && typeof __LAN_HOST__ === "string" && __LAN_HOST__ !== "localhost") {
   const proto = location.protocol === "https:" ? "https" : "http";
   const url = `${proto}://${__LAN_HOST__}:${location.port || 5173}/`;
@@ -762,6 +922,187 @@ if (import.meta.env.DEV && !isPhone && typeof __LAN_HOST__ === "string" && __LAN
 }
 
 paintTitle();
+
+const invite = parseInvite();
+if (invite.courseId) courseId = invite.courseId;
+if (invite.mode) playMode = invite.mode;
+if (invite.difficulty) {
+  difficulty = saveDifficulty(invite.difficulty);
+  paintDiff();
+}
+if (invite.courseId) persistGarage();
+paintTitle();
+
+for (const btn of document.querySelectorAll(".diff-btn")) {
+  btn.addEventListener("click", () => {
+    difficulty = saveDifficulty(btn.dataset.diff);
+    paintDiff();
+  });
+}
+
+$("item-slot")?.addEventListener("pointerdown", (e) => {
+  e.preventDefault();
+  input.queueSelect(0);
+});
+$("item-slot-b")?.addEventListener("pointerdown", (e) => {
+  e.preventDefault();
+  input.queueSelect(1);
+});
+
+$("btn-result-char")?.addEventListener("click", () => {
+  unlock();
+  goSelect(playMode);
+});
+$("btn-result-garage")?.addEventListener("click", () => {
+  unlock();
+  goSelect(playMode);
+  setGarageTab("body");
+});
+$("btn-result-ta")?.addEventListener("click", () => {
+  unlock();
+  goSelect("time");
+});
+$("btn-invite")?.addEventListener("click", async () => {
+  const url = inviteUrl({ courseId, mode: playMode, difficulty });
+  try {
+    if (navigator.share) await navigator.share({ title: "むしカート", text: "むしカートで遊ぼう", url });
+    else {
+      await navigator.clipboard.writeText(url);
+      $("btn-invite").textContent = "コピーしたよ";
+      setTimeout(() => ($("btn-invite").textContent = "招待リンクをコピー"), 1200);
+    }
+  } catch {
+    /* cancelled */
+  }
+});
+
+$("btn-tut-next")?.addEventListener("click", () => {
+  tutStep += 1;
+  paintTutorial();
+});
+$("btn-tut-skip")?.addEventListener("click", () => endTutorial(true));
+
+const TUT = [
+  { text: "カートはじどうで走るよ", test: () => true },
+  { text: "左をすべらせて曲がろう", test: (h) => Math.abs(h.yaw || 0) > 0.2 },
+  { text: "ドリフトを長押しして火花を溜めよう", test: (h) => h.drifting || (h.driftStage || 0) > 0 },
+  { text: "金色の巣でアイテムを取ろう", test: (h) => (h.items || []).some((s) => s.id) || h.itemIcon !== "空" },
+  { text: "必殺はレース中1回だけ。右の必殺ボタン", test: (h) => h.special && !h.special.ready },
+  { text: "コース端の緑の印が近道だよ", test: (h) => h.lap >= 2 },
+];
+
+function beginTutorial() {
+  const p = loadProfile();
+  tutActive = !p.tutorialDone;
+  tutStep = 0;
+  paintTutorial();
+}
+
+function endTutorial(save) {
+  tutActive = false;
+  $("tut-card")?.classList.add("hidden");
+  if (save) {
+    const p = loadProfile();
+    p.tutorialDone = true;
+    saveProfile(p);
+  }
+}
+
+function paintTutorial() {
+  const card = $("tut-card");
+  if (!card) return;
+  if (!tutActive || tutStep >= TUT.length) {
+    endTutorial(true);
+    return;
+  }
+  $("tut-text").textContent = TUT[tutStep].text;
+  card.classList.remove("hidden");
+}
+
+function advanceTutorial(h) {
+  if (!tutActive) return;
+  if (h.countdown >= 0) return;
+  const step = TUT[tutStep];
+  if (!step) return endTutorial(true);
+  if (tutStep === 0 && h.time > 2.5) tutStep = 1;
+  else if (step.test(h) && tutStep > 0) tutStep += 1;
+  paintTutorial();
+}
+
+function toastAch(text) {
+  const el = $("ach-toast");
+  if (!el) return;
+  el.textContent = text;
+  el.classList.remove("hidden");
+  clearTimeout(toastAch._t);
+  toastAch._t = setTimeout(() => el.classList.add("hidden"), 2400);
+}
+
+function bindShare({ summary, course }) {
+  const btn = $("btn-share-result");
+  if (!btn) return;
+  btn.onclick = async () => {
+    const text = shareText(summary, course);
+    const canvas = $("result-card");
+    let file = null;
+    try {
+      const blob = await new Promise((res) => canvas.toBlob(res, "image/png"));
+      if (blob && window.File) file = new File([blob], "mushi-kart.png", { type: "image/png" });
+    } catch {
+      /* ignore */
+    }
+    try {
+      if (navigator.share) {
+        const data = { title: "むしカート", text };
+        if (file && navigator.canShare?.({ files: [file] })) data.files = [file];
+        await navigator.share(data);
+      } else {
+        await navigator.clipboard.writeText(text);
+        btn.textContent = "コピーしました！";
+        setTimeout(() => (btn.textContent = "結果をシェア"), 1200);
+      }
+    } catch {
+      try {
+        await navigator.clipboard.writeText(text);
+        btn.textContent = "コピーしました！";
+        setTimeout(() => (btn.textContent = "結果をシェア"), 1200);
+      } catch {
+        /* ignore */
+      }
+    }
+  };
+}
+
+function drawResultCard({ you, stats, kit, course, bestUpdate, timeMode }) {
+  const canvas = $("result-card");
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+  const w = canvas.width;
+  const h = canvas.height;
+  const g = ctx.createLinearGradient(0, 0, w, h);
+  g.addColorStop(0, course.id === "volcano" ? "#5a2218" : course.id === "sea" ? "#1e5a72" : "#2f6b32");
+  g.addColorStop(1, "#1a120c");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, w, h);
+  ctx.fillStyle = "#fff6e4";
+  ctx.font = "900 42px sans-serif";
+  ctx.fillText("🐞 むしカート", 36, 64);
+  ctx.font = "800 28px sans-serif";
+  ctx.fillText(`${course.emoji} ${course.name}`, 36, 110);
+  ctx.font = "900 72px sans-serif";
+  ctx.fillText(timeMode ? fmt(you?.time || 0) : `${you?.place || "-"}位`, 36, 200);
+  ctx.font = "800 26px sans-serif";
+  ctx.fillText(`${kit.emoji || ""} ${kit.name || ""}　🪙 ${stats.coins || 0}`, 36, 250);
+  ctx.fillText(`${kit.bodyName || ""} / ${kit.tireName || ""}`, 36, 290);
+  if (you?.time != null && !timeMode) {
+    ctx.fillText(`⏱ ${fmt(you.time)}`, 36, 330);
+  }
+  if (bestUpdate) {
+    ctx.fillStyle = "#ffe08a";
+    ctx.font = "900 32px sans-serif";
+    ctx.fillText("🚀 自己ベスト更新！", 36, 372);
+  }
+}
 
 if (import.meta.env.PROD && "serviceWorker" in navigator) {
   navigator.serviceWorker

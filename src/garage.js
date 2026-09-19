@@ -12,6 +12,7 @@ export const BODIES = [
     accel: 1.2,
     handling: 0.32,
     weight: -0.22,
+    driftBonus: 1.1,
   },
   {
     id: "acorn",
@@ -24,6 +25,7 @@ export const BODIES = [
     accel: -2.0,
     handling: -0.32,
     weight: 0.35,
+    driftBonus: 0.9,
   },
   {
     id: "honey",
@@ -36,6 +38,7 @@ export const BODIES = [
     accel: 3.6,
     handling: 0.05,
     weight: 0.08,
+    driftBonus: 1.02,
   },
   {
     id: "stream",
@@ -48,6 +51,7 @@ export const BODIES = [
     accel: 0.2,
     handling: -0.05,
     weight: -0.08,
+    driftBonus: 1.06,
   },
 ];
 
@@ -123,6 +127,64 @@ export const TIRES = [
   },
 ];
 
+export const ACCESSORIES = [
+  {
+    id: "none",
+    name: "なし",
+    emoji: "➖",
+    tag: "標準",
+    desc: "飾りなし。数値はそのまま",
+    maxSpeed: 0,
+    accel: 0,
+    handling: 0,
+    weight: 0,
+    driftBonus: 1,
+    offroadMul: 0,
+  },
+  {
+    id: "flag",
+    name: "むし旗",
+    emoji: "🚩",
+    tag: "曲がり",
+    desc: "小さな旗。曲がりが少し良くなる",
+    color: 0xe07a5f,
+    maxSpeed: -0.2,
+    accel: 0,
+    handling: 0.14,
+    weight: 0.02,
+    driftBonus: 1.04,
+    offroadMul: 0,
+  },
+  {
+    id: "lantern",
+    name: "ちょうちん",
+    emoji: "🏮",
+    tag: "オフロード",
+    desc: "夜道のちょうちん。芝の外でも減速しにくい",
+    color: 0xff9f43,
+    maxSpeed: -0.35,
+    accel: 0.2,
+    handling: 0.04,
+    weight: 0.06,
+    driftBonus: 1,
+    offroadMul: 0.08,
+  },
+  {
+    id: "wing",
+    name: "はね飾り",
+    emoji: "🪽",
+    tag: "加速・ドリフト",
+    desc: "小さなはね。出足とドリフトが伸びるが重い",
+    color: 0xd8f0ff,
+    maxSpeed: 0.15,
+    accel: 1.1,
+    handling: -0.06,
+    weight: 0.04,
+    driftBonus: 1.12,
+    offroadMul: 0,
+  },
+];
+
 const CPU_KITS = {
   beetle: { bodyId: "acorn", tireId: "dirt" },
   ladybug: { bodyId: "leaf", tireId: "slick" },
@@ -141,26 +203,33 @@ export function getTire(id) {
   return TIRES.find((t) => t.id === id) ?? TIRES[0];
 }
 
+export function getAccessory(id) {
+  return ACCESSORIES.find((a) => a.id === id) ?? ACCESSORIES[0];
+}
+
 export function cpuKit(charId) {
   return CPU_KITS[charId] ?? { bodyId: "leaf", tireId: "slick" };
 }
 
-export function buildLoadout(charId, bodyId, tireId) {
+export function buildLoadout(charId, bodyId, tireId, accId = "none") {
   const c = getCharacter(charId);
   const b = getBody(bodyId);
   const t = getTire(tireId);
+  const a = getAccessory(accId);
   return {
     ...c,
     bodyId: b.id,
     tireId: t.id,
+    accId: a.id,
     bodyName: b.name,
     tireName: t.name,
-    maxSpeed: c.maxSpeed + b.maxSpeed + t.maxSpeed,
-    accel: c.accel + b.accel + t.accel,
-    handling: c.handling + b.handling + t.handling,
-    weight: Math.max(0.5, c.weight + b.weight + t.weight),
-    driftBonus: (c.driftBonus || 1) * (b.driftBonus || 1) * (t.driftBonus || 1),
-    offroadMul: t.offroadMul ?? 0.72,
+    accName: a.name,
+    maxSpeed: c.maxSpeed + b.maxSpeed + t.maxSpeed + a.maxSpeed,
+    accel: c.accel + b.accel + t.accel + a.accel,
+    handling: c.handling + b.handling + t.handling + a.handling,
+    weight: Math.max(0.5, c.weight + b.weight + t.weight + a.weight),
+    driftBonus: (c.driftBonus || 1) * (b.driftBonus || 1) * (t.driftBonus || 1) * (a.driftBonus || 1),
+    offroadMul: Math.min(0.98, (t.offroadMul ?? 0.72) + (a.offroadMul || 0)),
   };
 }
 
@@ -174,6 +243,8 @@ export function statBars(loadout) {
     { name: "加速", value: pct(loadout.accel, 12, 28) },
     { name: "曲がり", value: pct(loadout.handling, 1.25, 3.15) },
     { name: "重さ", value: pct(loadout.weight, 0.5, 1.8) },
+    { name: "ドリフト", value: pct(loadout.driftBonus || 1, 0.85, 1.45) },
+    { name: "芝外", value: pct(loadout.offroadMul || 0.72, 0.5, 1) },
   ];
 }
 
@@ -184,7 +255,7 @@ function validCourse(id) {
 }
 
 export function defaultGarage() {
-  return { charId: CHARACTERS[0].id, bodyId: "leaf", tireId: "slick", courseId: "garden" };
+  return { charId: CHARACTERS[0].id, bodyId: "leaf", tireId: "slick", accId: "none", courseId: "garden" };
 }
 
 export function loadGarage() {
@@ -194,7 +265,8 @@ export function loadGarage() {
       const charId = CHARACTERS.some((c) => c.id === raw.charId) ? raw.charId : CHARACTERS[0].id;
       const bodyId = BODIES.some((b) => b.id === raw.bodyId) ? raw.bodyId : "leaf";
       const tireId = TIRES.some((t) => t.id === raw.tireId) ? raw.tireId : "slick";
-      return { charId, bodyId, tireId, courseId: validCourse(raw.courseId) };
+      const accId = ACCESSORIES.some((a) => a.id === raw.accId) ? raw.accId : "none";
+      return { charId, bodyId, tireId, accId, courseId: validCourse(raw.courseId) };
     }
   } catch {
     /* ignore */
@@ -214,6 +286,7 @@ export function saveLastRun(run) {
       charId: run.charId,
       bodyId: run.bodyId,
       tireId: run.tireId,
+      accId: run.accId || "none",
       courseId: validCourse(run.courseId),
     })
   );
@@ -226,12 +299,14 @@ export function loadLastRun() {
       const charId = CHARACTERS.some((c) => c.id === raw.charId) ? raw.charId : null;
       const bodyId = BODIES.some((b) => b.id === raw.bodyId) ? raw.bodyId : null;
       const tireId = TIRES.some((t) => t.id === raw.tireId) ? raw.tireId : null;
+      const accId = ACCESSORIES.some((a) => a.id === raw.accId) ? raw.accId : "none";
       if (charId && bodyId && tireId) {
         return {
           mode: raw.mode === "time" ? "time" : "cpu",
           charId,
           bodyId,
           tireId,
+          accId,
           courseId: validCourse(raw.courseId),
         };
       }

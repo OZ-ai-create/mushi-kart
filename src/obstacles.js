@@ -217,9 +217,9 @@ export function createObstacles(scene, track, courseId) {
   }
   return {
     list,
-    update(dt, karts, audio, collide) {
+    update(dt, karts, audio, collide, pace = 1) {
       for (const o of this.list) {
-        o.time += dt;
+        o.time += dt * pace;
         if (o.hitCD > 0) o.hitCD -= dt;
         const f = track.at(o.t);
         const kind = o.mesh.userData.kind;
@@ -248,10 +248,12 @@ export function createObstacles(scene, track, courseId) {
           const dz = k.pos.z - o.mesh.position.z;
           // キリギリスの大ジャンプ中は、鳥より十分高ければ
           // 水平距離が重なっていても飛び越せるようにする。
-          const airborneOverBird =
-            kind === "bird" &&
-            k.pos.y > o.mesh.position.y + 0.72;
-          if (!airborneOverBird && dx * dx + dz * dz < o.radius * o.radius) {
+          const airborne =
+            k.leapT > 0 ||
+            k.hop > 0.35 ||
+            (kind === "bird" && k.pos.y > o.mesh.position.y + 0.72) ||
+            (kind === "fish" && k.pos.y > o.mesh.position.y + 0.85);
+          if (!airborne && dx * dx + dz * dz < o.radius * o.radius) {
             hitKart(k, audio);
             o.hitCD = 0.85;
           }
