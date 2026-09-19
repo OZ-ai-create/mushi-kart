@@ -72,6 +72,9 @@ export class Game {
     this.countShown = 4;
     this.finishWait = 0;
     this.ended = false;
+    this.coins = [];
+    this.coinScore = 0;
+    this.shortcutCd = 0;
 
     this._wipeScene();
     this._camReady = false;
@@ -105,6 +108,7 @@ export class Game {
     this.itemBoxes = world.itemBoxes;
     this.boostPads = world.boostPads;
     this.obstacles = world.obstacles;
+    this._buildRaceCoins();
     this.items = new ItemWorld(this.scene);
     this.fx = new FxWorld(this.scene, this.mobile);
     this.items.fx = this.fx;
@@ -207,17 +211,22 @@ export class Game {
       this.hooks?.onHud(this._hud());
       if (this.countT >= 3.35) {
         this.phase = "racing";
+        const launch = this.input?.sample?.() ?? { drift: false };
         for (const k of this.karts) {
-          k.boost = Math.max(k.boost, 0.62);
-          k.speed = Math.max(k.speed, k.stats.maxSpeed * 0.38);
+          const perfect = k.isPlayer && !!launch.drift;
+          k.boost = Math.max(k.boost, perfect ? 1.35 : 0.62);
+          k.speed = Math.max(k.speed, k.stats.maxSpeed * (perfect ? 0.52 : 0.38));
           k.slipstreamT = 0;
+          if (perfect) k.boostBurst = true;
         }
         this.audio?.boost();
+        if (launch.drift) this.hooks?.onBanner?.("ロケットスタート！");
       }
       return;
     }
 
     this.elapsed += dt;
+    this.shortcutCd = Math.max(0, this.shortcutCd - dt);
     const player = this.player;
     const gapBase = player.progress;
 
@@ -252,6 +261,8 @@ export class Game {
       if (kart.wantsBoostSfx && kart.isPlayer) this.audio?.boost();
       this._pickups(kart);
       this._boostPads(kart);
+      this._collectCoins(kart);
+      this._tryShortcut(kart);
 
       if (!kart.finished && kart.lap >= LAPS) {
         kart.finished = true;
@@ -372,6 +383,61 @@ export class Game {
     }
   }
 
+
+  _buildRaceCoins() {
+    this.coins = [];
+    const mats = new THREE.MeshStandardMaterial({ color: 0xffd54a, emissive: 0x7a4d00, emissiveIntensity: 0.8, metalness: 0.55, roughness: 0.28 });
+    const geo = new THREE.TorusGeometry(0.34, 0.11, 8, 18);
+    const stations = [0.08, 0.21, 0.34, 0.47, 0.59, 0.71, 0.84, 0.95];
+    for (const t of stations) for (const lat of [-2.2, 0, 2.2]) {
+      const f = this.track.at(t);
+      const m = new THREE.Mesh(geo, mats);
+      m.position.copy(f.point).addScaledVector(f.binormal, lat);
+      m.position.y += 0.72;
+      m.rotation.x = Math.PI / 2;
+      this.scene.add(m);
+      this.coins.push({ mesh: m, t, lat, active: true });
+    }
+  }
+
+  _collectCoins(kart) {
+    if (kart.finished) return;
+    for (const coin of this.coins) {
+      if (!coin.active) continue;
+      const dx = kart.pos.x - coin.mesh.position.x, dz = kart.pos.z - coin.mesh.position.z;
+      if (dx * dx + dz * dz < 1.5 * 1.5) {
+        coin.active = false;
+        coin.mesh.visible = false;
+        if (kart.isPlayer) {
+          this.coinScore += 1;
+          this.audio?.collect?.();
+          this.fx?.pickup?.(kart.pos);
+          this.hooks?.onBanner?.("コイン +1（" + this.coinScore + "）");
+        }
+      }
+    }
+  }
+
+  _tryShortcut(kart) {
+    if (kart.finished || this.shortcutCd > 0) return;
+    const course = getCourse(this.courseId);
+    for (const s of course.shortcuts ?? []) {
+      const d = Math.min(Math.abs(kart.t - s.t), 1 - Math.abs(kart.t - s.t));
+      if (d * this.track.length < 4.5 && Math.abs(kart.lateral) > s.minLat && Math.sign(kart.lateral) === s.side) {
+        kart.t = (kart.t + s.skip + 1) % 1;
+        kart.lateral *= 0.72;
+        kart.speed = Math.max(kart.speed, kart.stats.maxSpeed * 0.92);
+        kart.boost = Math.max(kart.boost, 0.48);
+        this.shortcutCd = 1.2;
+        if (kart.isPlayer) {
+          this.audio?.boost();
+          this.hooks?.onBanner?.("ショートカット！ " + s.name);
+        }
+        break;
+      }
+    }
+  }
+
   _boostPads(kart) {
     for (const pad of this.boostPads) {
       const dt = Math.abs(kart.t - pad.t);
@@ -453,6 +519,7 @@ export class Game {
         : "空";
     return {
       mode: this.mode,
+      coins: this.coinScore,
       place: p.place,
       lap: Math.min(LAPS, p.lap + 1),
       laps: LAPS,
@@ -538,8 +605,10 @@ export class Game {
     cancelAnimationFrame(this.raf);
     this.audio?.setEngine(0, false);
     if (clearScene) this.audio?.playTitle?.(this.courseId);
+    for (const c of this.coins ?? []) c.mesh.parent?.remove(c.mesh);
+    this.coins = [];
     this.fx?.dispose?.();
-    this.fx = null;
+        this.fx = null;
     this.items?.dispose();
     this.obstacles?.dispose?.();
     this.obstacles = null;
