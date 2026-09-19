@@ -13,22 +13,33 @@ function addShadow(mesh) {
   return mesh;
 }
 
-function buildWheels(root, tire) {
+function wheelLayout(tire) {
   const r = tire.radius;
+  const x = 0.4 + tire.width * 0.52;
+  const z = 0.54;
+  return {
+    r,
+    x,
+    z,
+    deck: r * 0.34 + 0.07,
+    spots: [
+      [-x, r, z],
+      [x, r, z],
+      [-x, r, -z],
+      [x, r, -z],
+    ],
+  };
+}
+
+function buildWheels(root, tire, layout) {
+  const { r } = layout;
   const width = tire.width;
   const geo = new THREE.CylinderGeometry(r, r, width, Math.max(18, tire.segments || 18));
   geo.rotateZ(Math.PI / 2);
   const m = mat(tire.color, { roughness: 0.7, metalness: 0.08 });
   const rimM = tire.rim != null ? mat(tire.rim, { roughness: 0.28, metalness: 0.35 }) : null;
-  const x = 0.38 + width * 0.55;
   const list = [];
-  const spots = [
-    [-x, r, 0.52],
-    [x, r, 0.52],
-    [-x, r, -0.52],
-    [x, r, -0.52],
-  ];
-  for (const [wx, wy, wz] of spots) {
+  for (const [wx, wy, wz] of layout.spots) {
     const w = addShadow(new THREE.Mesh(geo, m));
     w.position.set(wx, wy, wz);
     if (rimM) {
@@ -58,49 +69,105 @@ function buildWheels(root, tire) {
   return list;
 }
 
-function buildChassis(root, body, lift) {
-  const y = 0.08 + lift;
-  let main;
+function buildChassis(root, body, layout) {
+  const { r, x, z, deck } = layout;
+  const slim = body.id === "stream";
+  const deckW = slim ? 0.62 : 0.74;
+  const paint = mat(body.color, { roughness: 0.44, metalness: 0.07 });
+  const shade = mat(body.color, { roughness: 0.52, metalness: 0.05 });
+  const wood = mat(0x6b4423, { roughness: 0.68 });
+  const dark = mat(0x2e2218, { roughness: 0.6 });
+  const metal = mat(0x8b949e, { roughness: 0.3, metalness: 0.52 });
+  const kart = new THREE.Group();
+  root.add(kart);
+
+  const floor = addShadow(new THREE.Mesh(roundBox(deckW, 0.07, 1.42, 4, 0.05), paint));
+  floor.position.set(0, deck, 0.02);
+  kart.add(floor);
+
+  const keel = addShadow(new THREE.Mesh(roundBox(deckW * 0.55, 0.05, 1.28, 3, 0.03), dark));
+  keel.position.set(0, deck - 0.05, 0);
+  kart.add(keel);
+
+  for (const s of [-1, 1]) {
+    const pod = addShadow(new THREE.Mesh(roundBox(0.16, 0.15, 1.08, 3, 0.05), shade));
+    pod.position.set(s * (deckW * 0.5 + 0.02), deck + 0.08, -0.04);
+    kart.add(pod);
+    const rail = addShadow(new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 1.02, 8), metal));
+    rail.rotation.x = Math.PI / 2;
+    rail.position.set(s * (deckW * 0.52 + 0.08), deck + 0.18, -0.02);
+    kart.add(rail);
+  }
+
+  const nose = addShadow(new THREE.Mesh(roundBox(slim ? 0.48 : 0.56, 0.11, 0.4, 3, 0.06), paint));
+  nose.position.set(0, deck + 0.03, 0.78);
+  kart.add(nose);
+
+  const bumper = addShadow(new THREE.Mesh(roundBox(slim ? 0.5 : 0.58, 0.08, 0.12, 2, 0.04), dark));
+  bumper.position.set(0, deck + 0.02, 0.98);
+  kart.add(bumper);
+
+  const tail = addShadow(new THREE.Mesh(roundBox(deckW * 0.92, 0.14, 0.26, 3, 0.05), dark));
+  tail.position.set(0, deck + 0.07, -0.72);
+  kart.add(tail);
+
+  const seat = addShadow(new THREE.Mesh(roundBox(0.38, 0.08, 0.32, 3, 0.04), wood));
+  seat.position.set(0, deck + 0.12, -0.1);
+  kart.add(seat);
+  const back = addShadow(new THREE.Mesh(roundBox(0.36, 0.32, 0.07, 3, 0.04), wood));
+  back.position.set(0, deck + 0.28, -0.28);
+  back.rotation.x = -0.22;
+  kart.add(back);
+
+  const dash = addShadow(new THREE.Mesh(roundBox(0.44, 0.07, 0.16, 3, 0.04), wood));
+  dash.position.set(0, deck + 0.2, 0.36);
+  kart.add(dash);
+
+  for (const [sx, sz] of [
+    [-1, 1],
+    [1, 1],
+    [-1, -1],
+    [1, -1],
+  ]) {
+    const fender = addShadow(new THREE.Mesh(roundBox(0.2, 0.07, 0.32, 2, 0.04), paint));
+    fender.position.set(sx * x, r + 0.02, sz * z);
+    kart.add(fender);
+  }
+
   if (body.id === "leaf") {
-    main = addShadow(new THREE.Mesh(roundBox(1.18, 0.16, 1.55, 4, 0.07), mat(body.color, { roughness: 0.48 })));
-    main.position.set(0, y, 0);
-    root.add(main);
-    const tip = addShadow(new THREE.Mesh(roundBox(0.72, 0.1, 0.42, 3, 0.05), mat(0x86b36a)));
-    tip.position.set(0, y + 0.02, 0.72);
-    root.add(tip);
+    const tip = addShadow(new THREE.Mesh(roundBox(0.42, 0.05, 0.34, 3, 0.05), mat(0x86b36a, { roughness: 0.5 })));
+    tip.position.set(0, deck + 0.1, 0.82);
+    kart.add(tip);
   } else if (body.id === "acorn") {
-    main = addShadow(new THREE.Mesh(new THREE.SphereGeometry(0.62, 20, 16), mat(body.color, { roughness: 0.62 })));
-    main.scale.set(1.08, 0.58, 1.28);
-    main.position.set(0, y + 0.12, 0);
-    root.add(main);
-    const cap = addShadow(new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.44, 0.2, 16), mat(0x5c4030, { roughness: 0.78 })));
-    cap.position.set(0, y + 0.34, -0.42);
-    cap.rotation.x = 0.55;
-    root.add(cap);
+    const cap = addShadow(new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.2, 0.12, 12), mat(0x5c4030, { roughness: 0.78 })));
+    cap.position.set(0, deck + 0.16, 0.86);
+    cap.rotation.x = 0.85;
+    kart.add(cap);
+    const nut = addShadow(new THREE.Mesh(new THREE.SphereGeometry(0.12, 12, 10), mat(0x8b5a2b, { roughness: 0.62 })));
+    nut.scale.set(1, 0.72, 1.1);
+    nut.position.set(0, deck + 0.14, 0.72);
+    kart.add(nut);
   } else if (body.id === "honey") {
-    const geo = new THREE.CylinderGeometry(0.6, 0.6, 1.38, 12);
-    geo.rotateX(Math.PI / 2);
-    main = addShadow(new THREE.Mesh(geo, mat(body.color, { roughness: 0.32, metalness: 0.12 })));
-    main.position.set(0, y + 0.08, 0);
-    root.add(main);
-    for (const z of [-0.28, 0.08, 0.38]) {
-      const cell = addShadow(new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.08, 8), mat(0xc9a36a)));
-      cell.position.set(0.22, y + 0.22, z);
-      root.add(cell);
+    for (const hz of [-0.22, 0.08, 0.34]) {
+      const cell = addShadow(new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.05, 6), mat(0xc9a36a, { roughness: 0.4 })));
+      cell.rotation.z = Math.PI / 2;
+      cell.position.set(deckW * 0.5 + 0.08, deck + 0.14, hz);
+      kart.add(cell);
     }
   } else {
-    main = addShadow(new THREE.Mesh(roundBox(0.76, 0.18, 1.78, 4, 0.08), mat(body.color, { roughness: 0.42 })));
-    main.position.set(0, y, 0.04);
-    root.add(main);
-    const nose = addShadow(new THREE.Mesh(new THREE.SphereGeometry(0.26, 14, 12), mat(0xffc4b0, { roughness: 0.4 })));
-    nose.scale.set(1, 0.72, 1.15);
-    nose.position.set(0, y, 0.98);
-    root.add(nose);
+    const petal = addShadow(new THREE.Mesh(new THREE.SphereGeometry(0.16, 12, 10), mat(0xffc4b0, { roughness: 0.42 })));
+    petal.scale.set(1.15, 0.55, 1.35);
+    petal.position.set(0, deck + 0.08, 0.92);
+    kart.add(petal);
   }
-  const seat = addShadow(new THREE.Mesh(roundBox(0.55, 0.16, 0.4, 3, 0.05), mat(0x5c4030, { roughness: 0.7 })));
-  seat.position.set(0, y + 0.18, -0.12);
-  root.add(seat);
-  return main;
+
+  return {
+    kart,
+    deck,
+    seatY: deck + 0.16,
+    dashY: deck + 0.28,
+    dashZ: 0.4,
+  };
 }
 
 const _vA = new THREE.Vector3();
@@ -174,27 +241,27 @@ function placeSeg(mesh, a, b) {
   mesh.quaternion.setFromUnitVectors(_up, _vC.normalize());
 }
 
-function addDriveRig(rider, spec) {
+function addDriveRig(rider, spec, bug, chassis) {
   const {
     legColor,
     legR = 0.042,
     shoulderY = 0.58,
     shoulderZ = 0.12,
     shoulderX = 0.24,
-    wheelY = 0.5,
-    wheelZ = 0.58,
-    wheelR = 0.21,
+    wheelR = 0.18,
   } = spec;
-
-  const dash = addShadow(new THREE.Mesh(roundBox(0.42, 0.08, 0.18, 3, 0.04), mat(0x5c4030, { roughness: 0.7 })));
-  dash.position.set(0, wheelY - 0.16, wheelZ - 0.12);
-  rider.add(dash);
+  const sc = bug.scale.x;
+  const sx = shoulderX * sc;
+  const sy = bug.position.y + shoulderY * sc;
+  const sz = bug.position.z + shoulderZ * sc;
+  const wheelY = chassis.dashY + 0.08;
+  const wheelZ = chassis.dashZ + 0.1;
 
   const col = addShadow(
-    new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.04, 0.26, 8), mat(0x4a3424, { roughness: 0.62 }))
+    new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.032, 0.2, 8), mat(0x4a3424, { roughness: 0.62 }))
   );
-  col.position.set(0, wheelY - 0.14, wheelZ - 0.04);
-  col.rotation.x = 0.42;
+  col.position.set(0, wheelY - 0.12, wheelZ - 0.06);
+  col.rotation.x = 0.55;
   rider.add(col);
 
   const wheel = new THREE.Group();
@@ -243,7 +310,7 @@ function addDriveRig(rider, spec) {
     rider.add(upper, lower);
     arms.push({
       side: s,
-      shoulder: new THREE.Vector3(s * shoulderX, shoulderY, shoulderZ),
+      shoulder: new THREE.Vector3(s * sx, sy, sz),
       upper,
       lower,
     });
@@ -278,10 +345,10 @@ function updateDrive(rider, dt, state) {
 }
 
 const DRIVE = {
-  beetle: { legColor: 0x161410, legR: 0.055, shoulderX: 0.34, shoulderY: 0.58, shoulderZ: 0.12, wheelY: 0.46, wheelZ: 0.72, wheelR: 0.24 },
-  ladybug: { legColor: 0x1a120c, legR: 0.038, shoulderX: 0.26, shoulderY: 0.58, shoulderZ: 0.12, wheelY: 0.52, wheelZ: 0.66, wheelR: 0.22 },
-  bee: { legColor: 0x3b2a18, legR: 0.04, shoulderX: 0.24, shoulderY: 0.58, shoulderZ: 0.12, wheelY: 0.52, wheelZ: 0.64, wheelR: 0.22 },
-  hopper: { legColor: 0x7a9a45, legR: 0.042, shoulderX: 0.24, shoulderY: 0.6, shoulderZ: 0.18, wheelY: 0.52, wheelZ: 0.7, wheelR: 0.22 },
+  beetle: { legColor: 0x161410, legR: 0.05, shoulderX: 0.32, shoulderY: 0.58, shoulderZ: 0.14, wheelR: 0.17 },
+  ladybug: { legColor: 0x1a120c, legR: 0.034, shoulderX: 0.24, shoulderY: 0.58, shoulderZ: 0.14, wheelR: 0.16 },
+  bee: { legColor: 0x3b2a18, legR: 0.036, shoulderX: 0.22, shoulderY: 0.58, shoulderZ: 0.14, wheelR: 0.16 },
+  hopper: { legColor: 0x7a9a45, legR: 0.038, shoulderX: 0.22, shoulderY: 0.62, shoulderZ: 0.2, wheelR: 0.16 },
 };
 
 function makeBeetle(root) {
@@ -498,15 +565,20 @@ export function createRacer(id, label, kit = {}) {
   const bodyDef = getBody(kit.bodyId);
   const tireDef = getTire(kit.tireId);
   const root = new THREE.Group();
-  const body = buildChassis(root, bodyDef, tireDef.radius);
-  const wheelList = buildWheels(root, tireDef);
+  const layout = wheelLayout(tireDef);
+  const chassis = buildChassis(root, bodyDef, layout);
+  const wheelList = buildWheels(root, tireDef, layout);
   const rider = new THREE.Group();
-  rider.position.set(0, tireDef.radius - 0.28, -0.14);
-  BUILDERS[def.id](rider);
-  addDriveRig(rider, DRIVE[def.id] || DRIVE.beetle);
+  const bug = new THREE.Group();
+  bug.scale.setScalar(0.7);
+  bug.position.set(0, chassis.seatY - 0.08, -0.22);
+  BUILDERS[def.id](bug);
+  rider.add(bug);
+  addDriveRig(rider, DRIVE[def.id] || DRIVE.beetle, bug, chassis);
   root.add(rider);
   root.userData.rider = rider;
-  if (rider.userData.wings) root.userData.wings = rider.userData.wings;
+  root.userData.bug = bug;
+  if (bug.userData.wings) root.userData.wings = bug.userData.wings;
 
   const blob = new THREE.Mesh(
     new THREE.CircleGeometry(0.78, 24),
@@ -541,7 +613,7 @@ export function createRacer(id, label, kit = {}) {
     const tag = new THREE.Sprite(
       new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false })
     );
-    tag.position.y = 2.05;
+    tag.position.y = 1.72;
     tag.scale.set(2.6, 0.65, 1);
     tag.renderOrder = 20;
     root.add(tag);
@@ -557,10 +629,32 @@ export function createRacer(id, label, kit = {}) {
       metalness: 0.05,
     })
   );
-  shield.position.y = 0.7;
+  shield.position.y = 0.78;
   shield.visible = false;
   root.add(shield);
   root.userData.shieldMesh = shield;
+
+  const jetMat = () =>
+    new THREE.MeshBasicMaterial({
+      color: 0xffc14d,
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide,
+    });
+  const jets = [];
+  for (const s of [-1, 1]) {
+    const jet = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.38, 8, 1, true), jetMat());
+    jet.rotation.x = Math.PI;
+    jet.position.set(s * 0.18, layout.deck + 0.12, -0.86);
+    jet.renderOrder = 7;
+    jet.castShadow = false;
+    jet.receiveShadow = false;
+    root.add(jet);
+    jets.push(jet);
+  }
+  root.userData.jets = jets;
 
   root.userData.update = (dt, state) => {
     const spin = state.speed * dt * 1.7;
@@ -568,7 +662,7 @@ export function createRacer(id, label, kit = {}) {
     wheelList[0].rotation.y = -state.steer * 0.35;
     wheelList[1].rotation.y = -state.steer * 0.35;
     updateDrive(rider, dt, state);
-    const ants = rider.userData.antennae;
+    const ants = bug.userData.antennae;
     if (ants) {
       const t = performance.now() * 0.004;
       for (const a of ants) {
@@ -586,10 +680,19 @@ export function createRacer(id, label, kit = {}) {
       }
     }
     const glow = state.ram ? 0.55 : state.boost ? 0.35 : 0;
-    body.material.emissive.setRGB(glow, glow * (state.ram ? 0.18 : 0.6), 0);
-    if (rider.userData.shells) {
-      for (const s of rider.userData.shells) {
+    if (bug.userData.shells) {
+      for (const s of bug.userData.shells) {
         s.material.emissive?.setRGB(glow * 0.45, glow * (state.ram ? 0.12 : 0.28), 0);
+      }
+    }
+    if (jets) {
+      const on = !!(state.boost || state.ram);
+      const flicker = 0.72 + Math.sin(performance.now() * 0.05) * 0.28;
+      for (const j of jets) {
+        j.material.opacity = on ? 0.58 * flicker : 0;
+        j.material.color.setHex(state.ram ? 0xff4d2a : 0xffe08a);
+        const len = on ? 1.25 + flicker * 0.7 + (state.ram ? 0.4 : 0) : 0.12;
+        j.scale.set(0.9 + flicker * 0.28, len, 0.9 + flicker * 0.28);
       }
     }
     shield.visible = !!state.shield;
@@ -601,7 +704,7 @@ export function createRacer(id, label, kit = {}) {
 
   root.traverse((o) => {
     if (!o.isMesh) return;
-    if (o === blob || o === shield) {
+    if (o === blob || o === shield || jets.includes(o)) {
       o.castShadow = false;
       return;
     }
@@ -630,8 +733,8 @@ export function createPreviewLoop(canvas, getKit) {
   renderer.toneMappingExposure = 1.12;
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(35, canvas.width / canvas.height, 0.1, 40);
-  camera.position.set(1.85, 1.12, 2.35);
-  camera.lookAt(0, 0.58, 0.18);
+  camera.position.set(2.15, 1.28, 2.55);
+  camera.lookAt(0, 0.42, 0.02);
   scene.add(new THREE.HemisphereLight(0xfff2d4, 0x3d5c32, 1.05));
   const sun = new THREE.DirectionalLight(0xffffff, 1.05);
   sun.position.set(4, 8, 3);

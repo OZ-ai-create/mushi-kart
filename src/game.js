@@ -7,6 +7,7 @@ import { ITEM_DEFS, ItemWorld, rollItem, iconOf } from "./items.js";
 import { buildLoadout, cpuKit } from "./garage.js";
 import { getCourse } from "./courses.js";
 import { activateSpecial, aiWantsSpecial, applyRamHits, getSpecial } from "./specials.js";
+import { FxWorld } from "./fx.js";
 
 const LAPS = 3;
 const _look = new THREE.Vector3();
@@ -32,14 +33,14 @@ export class Game {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.08;
+    this.renderer.toneMappingExposure = 1.12;
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.setClearColor(0x9ec9e6, 1);
 
     this.scene = new THREE.Scene();
     this.scene.fog = new THREE.FogExp2(0x9ec9e6, 0.0062);
-    this.camera = new THREE.PerspectiveCamera(58, 1, 0.35, 380);
+    this.camera = new THREE.PerspectiveCamera(52, 1, 0.28, 380);
     this.clock = new THREE.Clock();
     this.input = null;
     this.sun = null;
@@ -75,7 +76,7 @@ export class Game {
     this._wipeScene();
     this._camReady = false;
     this.renderer.setClearColor(course.clear, 1);
-    this.scene.fog = new THREE.FogExp2(course.fog, 0.006);
+    this.scene.fog = new THREE.FogExp2(course.fog, 0.0048);
     this.scene.add(new THREE.HemisphereLight(course.hemiSky, course.hemiGnd, course.hemiInt * 0.68));
     const sun = new THREE.DirectionalLight(course.sun, course.sunInt * 0.88);
     sun.position.set(28, 48, 16);
@@ -94,7 +95,7 @@ export class Game {
     this.scene.add(sun);
     this.scene.add(sun.target);
     this.sun = sun;
-    const fill = new THREE.DirectionalLight(0xcfe6ff, 0.18);
+    const fill = new THREE.DirectionalLight(0xcfe6ff, 0.28);
     fill.position.set(-22, 18, -28);
     this.scene.add(fill);
     this.scene.add(new THREE.AmbientLight(course.ambient, 0.18));
@@ -105,6 +106,8 @@ export class Game {
     this.boostPads = world.boostPads;
     this.obstacles = world.obstacles;
     this.items = new ItemWorld(this.scene);
+    this.fx = new FxWorld(this.scene, this.mobile);
+    this.items.fx = this.fx;
 
     const others = CHARACTERS.map((c) => c.id).filter((id) => id !== playerId);
     const order = this.mode === "cpu" ? [...others, playerId] : [playerId];
@@ -149,6 +152,7 @@ export class Game {
     if (!spec) return;
     const color = spec.id === "horn" ? 0xff6b35 : spec.id === "leap" ? 0x86b36a : spec.id === "lucky" ? 0xff8fab : 0xffe066;
     this.items?.burst?.(kart, color);
+    this.fx?.burst?.(kart.pos, color, 22);
     if (kart.isPlayer) this.hooks?.onBanner(spec.banner);
   }
 
@@ -269,6 +273,7 @@ export class Game {
     this._updateSlipstream(dt);
     this.items.update(dt, this.karts, this.audio, this.track);
     this.obstacles?.update(dt, this.karts, this.audio, true);
+    this.fx?.update(dt, this.karts, this.courseId);
 
     const live = this.karts.filter((k) => !k.finished).sort((a, b) => b.progress - a.progress);
     live.forEach((k, i) => {
@@ -278,7 +283,7 @@ export class Game {
     this.audio?.setEngine(player.speed / player.stats.maxSpeed, this.phase !== "countdown");
     this._snapCamera(false, dt);
     this.hooks?.onHud(this._hud());
-    this.hooks?.onBoost(player.boost > 0);
+    this.hooks?.onBoost(player.boost > 0, player.speed, player.stun);
 
     if (this.phase === "finish") {
       this.finishWait += dt;
@@ -361,6 +366,8 @@ export class Game {
       kart.rouletteShow = got;
       kart.aiItemT = 0;
       if (kart.isPlayer) this.audio?.collect();
+      this.fx?.pickup?.(kart.pos);
+      this.items?.burst?.(kart, 0xffe066);
       break;
     }
   }
@@ -371,7 +378,8 @@ export class Game {
       const wrap = Math.min(dt, 1 - dt);
       if (wrap < 0.012 && Math.abs(kart.lateral) < 3.2 && kart.speed > 6) {
         if (kart.boost < 0.9) {
-          kart.boost = 1.05;
+          kart.boost = 1.15;
+          kart.boostBurst = true;
           if (kart.isPlayer) this.audio?.boost();
         }
       }
@@ -388,29 +396,51 @@ export class Game {
 
   _snapCamera(instant, dt = 0.016) {
     const p = this.player;
-    const back = 8.2 + Math.min(2.4, p.speed * 0.038);
-    const height = 4.15;
-    _wanted.set(p.pos.x - Math.sin(p.yaw) * back, p.pos.y + height, p.pos.z - Math.cos(p.yaw) * back);
-    _look.set(p.pos.x + Math.sin(p.yaw) * 11, p.pos.y + 0.55, p.pos.z + Math.cos(p.yaw) * 11);
+    const boosting = p.boost > 0;
+    const back = 5.9 + Math.min(1.9, p.speed * 0.036) + (boosting ? 0.42 : 0) + (p.drifting ? 0.16 : 0);
+    const height = 2.42 + Math.min(0.5, p.speed * 0.01) + (p.drifting ? 0.08 : 0);
+    const look = 5.2 + Math.min(1.7, p.speed * 0.032);
+    const side = -p.steerVis * (p.drifting ? 1.35 : 0.82);
+    const nx = Math.sin(p.yaw);
+    const nz = Math.cos(p.yaw);
+    const rx = nz;
+    const rz = -nx;
+    _wanted.set(
+      p.pos.x - nx * back + rx * side,
+      p.pos.y + height + (p.hop > 0 ? p.hop * 0.22 : 0),
+      p.pos.z - nz * back + rz * side
+    );
+    _look.set(p.pos.x + nx * look + rx * side * 0.28, p.pos.y + 0.95, p.pos.z + nz * look + rz * side * 0.28);
     if (instant || !this._camReady) {
       this.camera.position.copy(_wanted);
       this._lookSmooth.copy(_look);
       this._camReady = true;
     } else {
-      const k = 1 - Math.exp(-dt * 6.1);
+      const k = 1 - Math.exp(-dt * (boosting ? 8.1 : 6.8));
       this.camera.position.lerp(_wanted, k);
-      this._lookSmooth.lerp(_look, 1 - Math.exp(-dt * 7.4));
+      this._lookSmooth.lerp(_look, 1 - Math.exp(-dt * 9.2));
     }
     if (p.stun > 0) {
-      this.camera.position.x += (Math.random() - 0.5) * 0.14;
-      this.camera.position.y += (Math.random() - 0.5) * 0.07;
+      this.camera.position.x += (Math.random() - 0.5) * 0.2;
+      this.camera.position.y += (Math.random() - 0.5) * 0.1;
+    } else if (boosting) {
+      this.camera.position.x += (Math.random() - 0.5) * 0.02;
+      this.camera.position.y += (Math.random() - 0.5) * 0.01;
     }
+    this.camera.up.set(0, 1, 0);
     this.camera.lookAt(this._lookSmooth);
-    const fov = 56 + Math.min(10, p.speed * 0.22) + (p.boost > 0 ? 4 : 0);
+    this.camera.rotateZ(-p.steerVis * 0.075 - (p.drifting ? p.driftDir * 0.045 : 0));
+    const fov = 48 + Math.min(13, p.speed * 0.3) + (boosting ? 8.5 : 0) + (p.drifting ? 1.6 : 0);
     if (Math.abs(this.camera.fov - fov) > 0.08) {
-      this.camera.fov = THREE.MathUtils.damp(this.camera.fov, fov, 5.2, dt);
+      this.camera.fov = THREE.MathUtils.damp(this.camera.fov, fov, 6.6, dt);
       this.camera.updateProjectionMatrix();
     }
+    this.renderer.toneMappingExposure = THREE.MathUtils.damp(
+      this.renderer.toneMappingExposure,
+      boosting ? 1.32 : 1.12,
+      5.4,
+      dt
+    );
   }
 
   _hud() {
@@ -452,6 +482,11 @@ export class Game {
         kind: o.mesh.userData.kind,
       })),
       threat: this._playerThreat(),
+      speed: p.speed,
+      boost: p.boost > 0,
+      stun: p.stun,
+      drifting: !!p.drifting,
+      driftStage: p.driftStage || 0,
       special: (() => {
         const spec = getSpecial(p.stats.id);
         return { ready: !p.specialUsed, name: spec.name, icon: spec.icon };
@@ -503,6 +538,8 @@ export class Game {
     cancelAnimationFrame(this.raf);
     this.audio?.setEngine(0, false);
     if (clearScene) this.audio?.playTitle?.(this.courseId);
+    this.fx?.dispose?.();
+    this.fx = null;
     this.items?.dispose();
     this.obstacles?.dispose?.();
     this.obstacles = null;

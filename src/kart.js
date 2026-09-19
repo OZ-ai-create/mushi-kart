@@ -28,7 +28,10 @@ export class Kart {
     this.driftHold = 0;
     this.driftTurboGiven = false;
     this.driftBoostLevel = 0;
+    this.driftStage = 0;
     this.wantsBoostSfx = false;
+    this.boostBurst = false;
+    this.justLanded = false;
     this.hop = 0;
     this.offroad = false;
     this.t = 0;
@@ -74,6 +77,9 @@ export class Kart {
     this.driftHold = 0;
     this.driftTurboGiven = false;
     this.driftBoostLevel = 0;
+    this.driftStage = 0;
+    this.boostBurst = false;
+    this.justLanded = false;
     this.item = null;
     this.roulette = 0;
     this._pitch = 0;
@@ -86,6 +92,15 @@ export class Kart {
     this._ramHit = null;
     this.mesh.position.copy(this.pos);
     this.mesh.rotation.set(0, this.yaw, 0);
+  }
+
+  _giveTurbo(amount) {
+    this.driftTurboGiven = true;
+    this.boost = Math.max(this.boost, amount);
+    this.speed = Math.max(this.speed, this.stats.maxSpeed * (0.86 + amount * 0.09));
+    this.hop = Math.max(this.hop, 0.22);
+    this.wantsBoostSfx = true;
+    this.boostBurst = true;
   }
 
   snapToTrack(track, fromWorld = false) {
@@ -105,6 +120,8 @@ export class Kart {
   update(dt, input, track) {
     this.lastPos.copy(this.pos);
     this.wantsBoostSfx = false;
+    this.justLanded = false;
+    const hopBefore = this.hop;
     if (this.hitFlash > 0) this.hitFlash -= dt;
     if (this.hitCooldown > 0) this.hitCooldown -= dt;
     if (this.shield > 0) this.shield -= dt;
@@ -118,9 +135,11 @@ export class Kart {
       if (this.leapT <= 0) {
         this.boost = Math.max(this.boost, 0.9);
         this.wantsBoostSfx = true;
+        this.boostBurst = true;
       }
     }
     if (this.hop > 0) this.hop -= dt * (this.leapT > 0 ? 0.9 : 3.6);
+    if (hopBefore > 0 && this.hop <= 0) this.justLanded = true;
 
     if (this.roulette > 0) {
       this.roulette -= dt;
@@ -145,26 +164,26 @@ export class Kart {
         this.driftHold = 0;
         this.driftTurboGiven = false;
         this.driftBoostLevel = 0;
-        this.hop = 1;
+        this.hop = 0.86;
       }
-      this.driftHold += dt;
-      this.driftBoostLevel =
-        this.driftHold >= 2.2 ? 3 :
-        this.driftHold >= 1.35 ? 2 :
-        this.driftHold >= 0.65 ? 1 : 0;
-      steer = this.driftDir * 0.28 + steer * 0.22;
+      this.driftHold += dt * (this.stats.driftBonus || 1);
+      this.driftStage = this.driftHold >= 2.35 ? 3 : this.driftHold >= 1.15 ? 2 : this.driftHold >= 0.4 ? 1 : 0;
+      this.driftBoostLevel = this.driftStage;
+      steer = this.driftDir * 0.4 + steer * 0.2;
+      if (!this.driftTurboGiven && this.driftStage >= 3 && this.speed > 7) {
+        this._giveTurbo(1.85);
+      }
     } else if (this.drifting) {
       if (!this.driftTurboGiven && this.speed > 7 && !this.finished) {
-        const turbo = [0, 0.38, 0.72, 1.2][this.driftBoostLevel];
-        if (turbo > 0) {
-          this.boost = Math.max(this.boost, turbo);
-          this.wantsBoostSfx = true;
-        }
+        if (this.driftStage >= 3) this._giveTurbo(1.85);
+        else if (this.driftStage >= 2) this._giveTurbo(1.2);
+        else if (this.driftStage >= 1) this._giveTurbo(0.58);
       }
       this.drifting = false;
       this.driftHold = 0;
       this.driftTurboGiven = false;
       this.driftBoostLevel = 0;
+      this.driftStage = 0;
     }
 
     const boosting = this.boost > 0;
@@ -252,7 +271,7 @@ export class Kart {
     this.mesh.position.copy(this.pos);
     this.mesh.rotation.order = "YXZ";
     this.mesh.rotation.y = this.yaw;
-    const roll = -this.steerVis * 0.16 - (this.drifting ? this.driftDir * 0.2 : 0);
+    const roll = -this.steerVis * 0.22 - (this.drifting ? this.driftDir * 0.38 : 0);
     this.mesh.rotation.z = roll;
     const ahead = track.at(this.t + 0.01);
     const here = track.at(this.t);
@@ -267,7 +286,9 @@ export class Kart {
       shield: this.shield > 0 || this.ghostT > 0,
       ram: this.ramT > 0,
       drift: this.drifting,
+      driftStage: this.driftStage,
       driftLevel: this.driftBoostLevel,
+      offroad: this.offroad,
     });
     if (this.hitFlash > 0) this.mesh.visible = Math.sin(this.hitFlash * 40) > 0;
     else this.mesh.visible = true;

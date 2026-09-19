@@ -60,13 +60,116 @@ body {
   inset: 0;
   pointer-events: none;
   opacity: 0;
-  box-shadow: inset 0 0 90px 24px rgba(255, 170, 50, 0.45);
+  background:
+    radial-gradient(ellipse 80% 55% at 50% 100%, rgba(255, 176, 64, 0.22), transparent 58%),
+    radial-gradient(ellipse 90% 70% at 50% 40%, transparent 48%, rgba(255, 210, 120, 0.08) 100%);
+  box-shadow: inset 0 0 90px 18px rgba(255, 168, 48, 0.12);
   transition: opacity 0.12s linear;
   z-index: 2;
 }
 
 #boost-glow.on {
   opacity: 1;
+}
+
+#boost-glow.hot {
+  background:
+    radial-gradient(ellipse 80% 58% at 50% 100%, rgba(255, 140, 40, 0.3), transparent 60%),
+    radial-gradient(ellipse 90% 70% at 50% 40%, transparent 42%, rgba(255, 230, 150, 0.12) 100%);
+}
+
+#speed-streaks {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+  opacity: 0;
+  background:
+    repeating-conic-gradient(
+      from 0deg at 50% 54%,
+      transparent 0 6.6deg,
+      rgba(255, 255, 255, 0.045) 6.75deg,
+      transparent 7.5deg
+    );
+  -webkit-mask-image: radial-gradient(ellipse 92% 78% at 50% 58%, transparent 16%, #000 46%);
+  mask-image: radial-gradient(ellipse 92% 78% at 50% 58%, transparent 16%, #000 46%);
+  mix-blend-mode: screen;
+  transition: opacity 0.14s linear;
+}
+
+#speed-streaks.on {
+  opacity: 0.42;
+  animation: streak-spin 0.55s linear infinite;
+}
+
+#speed-streaks.boost {
+  opacity: 0.78;
+  background:
+    repeating-conic-gradient(
+      from 0deg at 50% 54%,
+      transparent 0 5.4deg,
+      rgba(255, 224, 150, 0.09) 5.55deg,
+      transparent 6.3deg
+    );
+}
+
+#hit-veil {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+  opacity: 0;
+  background:
+    radial-gradient(circle at 50% 58%, transparent 38%, rgba(48, 10, 8, 0.34) 100%),
+    linear-gradient(180deg, rgba(255, 80, 40, 0.08), transparent 30%, transparent 70%, rgba(40, 8, 8, 0.18));
+  transition: opacity 0.08s linear;
+}
+
+#hit-veil.on {
+  opacity: 1;
+}
+
+#drift-charge {
+  position: absolute;
+  left: 50%;
+  bottom: calc(26% + var(--safe-b));
+  transform: translateX(-50%);
+  z-index: 5;
+  display: flex;
+  gap: 7px;
+  pointer-events: none;
+}
+
+#drift-charge i {
+  width: 30px;
+  height: 7px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.18);
+  box-shadow: 0 0 0 1px rgba(20, 12, 6, 0.28);
+}
+
+#drift-charge.s1 i:nth-child(1) {
+  background: #fff3d0;
+  box-shadow: 0 0 10px #fff3d0;
+}
+
+#drift-charge.s2 i:nth-child(-n + 2) {
+  background: #9ad7ff;
+  box-shadow: 0 0 10px #8fd4ff;
+}
+
+#drift-charge.s3 i {
+  background: #ffb347;
+  box-shadow: 0 0 12px #ffc45a;
+}
+
+@keyframes streak-spin {
+  from {
+    transform: scale(1.08) rotate(0deg);
+  }
+  to {
+    transform: scale(1.08) rotate(12deg);
+  }
 }
 
 .screen {

@@ -35,7 +35,14 @@ input.attach({
 
 const game = new Game($("game-canvas"), audio, {
   onHud: drawHud,
-  onBoost: (on) => $("boost-glow").classList.toggle("on", on),
+  onBoost: (on, speed = 0, stun = 0) => {
+    const glow = $("boost-glow");
+    glow.classList.toggle("on", !!on);
+    glow.classList.toggle("hot", !!on && speed > 20);
+    $("speed-streaks")?.classList.toggle("on", speed > 13);
+    $("speed-streaks")?.classList.toggle("boost", !!on);
+    $("hit-veil")?.classList.toggle("on", stun > 0);
+  },
   onBanner: (text) => {
     const el = $("race-banner");
     el.textContent = text;
@@ -587,6 +594,20 @@ function drawHud(h) {
     $("countdown").textContent = h.countdown === 0 ? "ゴー！" : String(h.countdown);
   } else if ($("countdown").textContent && $("countdown").textContent !== "") {
     $("countdown").textContent = "";
+  }
+  $("speed-streaks")?.classList.toggle("on", (h.speed || 0) > 13);
+  $("speed-streaks")?.classList.toggle("boost", !!h.boost);
+  $("hit-veil")?.classList.toggle("on", (h.stun || 0) > 0);
+  const glow = $("boost-glow");
+  glow?.classList.toggle("on", !!h.boost);
+  glow?.classList.toggle("hot", !!h.boost && (h.speed || 0) > 20);
+  const charge = $("drift-charge");
+  if (charge) {
+    const stage = h.drifting ? h.driftStage || 0 : 0;
+    charge.classList.toggle("hidden", !h.drifting);
+    charge.classList.toggle("s1", stage === 1);
+    charge.classList.toggle("s2", stage === 2);
+    charge.classList.toggle("s3", stage >= 3);
   }
   drawMinimap(h);
 }

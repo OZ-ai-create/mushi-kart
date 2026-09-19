@@ -39,7 +39,11 @@ export class Input {
       this._steering = true;
       this._steerId = e.pointerId;
       this._originX = e.clientX;
-      steerZone.setPointerCapture(e.pointerId);
+      try {
+        steerZone.setPointerCapture(e.pointerId);
+      } catch {
+        /* ignore */
+      }
       this._applySteer(e.clientX);
     });
     steerZone.addEventListener("pointermove", (e) => {
@@ -59,9 +63,13 @@ export class Input {
     const hold = (btn, key, onDown, onUp) => {
       btn.addEventListener("pointerdown", (e) => {
         e.preventDefault();
-        btn.setPointerCapture(e.pointerId);
         onDown();
         setHeld(btn, true);
+        try {
+          btn.setPointerCapture(e.pointerId);
+        } catch {
+          /* synthetic events in tests / some WebViews */
+        }
       });
       const up = () => {
         onUp();

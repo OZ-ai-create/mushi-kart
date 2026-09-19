@@ -61,6 +61,7 @@ export class ItemWorld {
     this.burst(kart, flashColor);
     if (id === "honey") {
       kart.boost = Math.max(kart.boost, 1.55);
+      kart.boostBurst = true;
       audio?.boost();
     } else if (id === "acorn") {
       this._acorn(kart);
@@ -133,6 +134,7 @@ export class ItemWorld {
         vel: new THREE.Vector3(Math.cos(a) * speed, 2.2 + Math.random() * 4.5, Math.sin(a) * speed)
       });
     }
+    this.fx?.burst?.(kart.pos, color, 14);
   }
 
   _acorn(kart) {
@@ -224,6 +226,7 @@ export class ItemWorld {
     ring.position.y += 0.2;
     this.scene.add(ring);
     this.rings.push({ mesh: ring, life: 0.55 });
+    this.fx?.burst?.(kart.pos, 0xd8f0ff, 22);
     for (const other of karts) {
       if (other === kart) continue;
       if (other.pos.distanceTo(kart.pos) < 11) hitKart(other, audio);
@@ -248,6 +251,8 @@ export class ItemWorld {
     ring.position.y += 0.25;
     this.scene.add(ring);
     this.rings.push({ mesh: ring, life: 0.7 });
+    this.fx?.burst?.(target.pos, 0xfff06a, 26);
+    this.fx?.hit?.(target.pos);
 
     // A short jagged lightning bolt makes the strike immediately readable.
     const points = [];
@@ -283,7 +288,9 @@ export class ItemWorld {
 
   _mushroom(kart, audio) {
     kart.boost = Math.max(kart.boost, 2.5);
+    kart.boostBurst = true;
     audio?.boost();
+    this.burst(kart, 0xff9f6a);
   }
 
   _ants(kart) {
@@ -362,6 +369,7 @@ export class ItemWorld {
     for (let i = this.shots.length - 1; i >= 0; i--) {
       const s = this.shots[i];
       this._updateShotPhysics(s, dt, track);
+      this.fx?.trail?.(s.mesh.position, 0xc48a4a);
 
       let dead = s.life <= 0;
       for (const k of karts) {
@@ -401,6 +409,7 @@ export class ItemWorld {
       }
 
       this._updateShotPhysics(s, dt, track);
+      this.fx?.trail?.(s.mesh.position, 0xff5a4a);
       let dead = s.life <= 0;
       for (const k of karts) {
         if (k === s.owner || k.finished) continue;
@@ -430,8 +439,10 @@ export class ItemWorld {
           else {
             k.speed *= 0.2;
             k.stun = Math.max(k.stun, 0.7);
+            k.hitFlash = 0.7;
           }
           dead = true;
+          this.fx?.hit?.(k.pos);
           audio?.hit();
           break;
         }
@@ -460,6 +471,7 @@ export class ItemWorld {
             k.boost = 0;
           }
           dead = true;
+          this.fx?.burst?.(ant.mesh.position, 0x3a2a20, 10);
           break;
         }
       }
@@ -521,6 +533,7 @@ export class ItemWorld {
           sl.hit.add(k);
           k.speed *= 0.42;
           k.boost = 0;
+          this.fx?.burst?.(k.pos, 0xf4d35e, 8);
           audio?.hit();
         }
       }

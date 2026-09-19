@@ -384,16 +384,20 @@ export class AudioBus {
   }
 
   collect() {
-    this._osc("triangle", 880, 0.08, 0.1);
-    this._osc("triangle", 1320, 0.12, 0.08);
+    this._osc("sine", 988, 0.1, 0.07);
+    this._osc("triangle", 1318, 0.14, 0.06);
+    this._osc("sine", 1760, 0.18, 0.04);
   }
 
   boost() {
-    this._osc("sawtooth", 180, 0.22, 0.08, 220);
+    this._osc("sawtooth", 130, 0.2, 0.055, 320);
+    this._osc("triangle", 380, 0.16, 0.045, 180);
+    this._osc("sine", 88, 0.24, 0.06, 50);
   }
 
   hit() {
-    this._osc("square", 90, 0.18, 0.14, -40);
+    this._osc("square", 68, 0.2, 0.15, -28);
+    this._osc("sawtooth", 160, 0.12, 0.09, -70);
   }
 
   use() {
