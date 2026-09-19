@@ -534,6 +534,7 @@ function startRace() {
   closePause();
   $("race-banner").textContent = "";
   $("countdown").textContent = "";
+  $("start-hint")?.classList.add("hidden");
   $("enemy-warn").classList.add("hidden");
   const spec = getSpecial(selected);
   $("special-icon").textContent = spec.icon;
@@ -595,6 +596,7 @@ function drawHud(h) {
   } else if ($("countdown").textContent && $("countdown").textContent !== "") {
     $("countdown").textContent = "";
   }
+  $("start-hint")?.classList.toggle("hidden", !h.startHint);
   $("speed-streaks")?.classList.toggle("on", (h.speed || 0) > 13);
   $("speed-streaks")?.classList.toggle("boost", !!h.boost);
   $("hit-veil")?.classList.toggle("on", (h.stun || 0) > 0);

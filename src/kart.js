@@ -8,7 +8,7 @@ function wrapPi(a) {
 
 // Acceleration is expressed as "how quickly this kart reaches its current cap".
 // Higher accel stat => shorter time from 0 to top speed.
-const ACCEL_TIME_REFERENCE = 30;
+const ACCEL_TIME_REFERENCE = 22;
 
 export class Kart {
   constructor({ stats, mesh, isPlayer, name }) {
@@ -60,6 +60,7 @@ export class Kart {
     this.leapT = 0;
     this.leapMax = 0;
     this._ramHit = null;
+    this._walled = false;
   }
 
   spawn(track, t, lateral) {
@@ -80,6 +81,7 @@ export class Kart {
     this.driftStage = 0;
     this.boostBurst = false;
     this.justLanded = false;
+    this._walled = false;
     this.item = null;
     this.roulette = 0;
     this._pitch = 0;
@@ -97,8 +99,8 @@ export class Kart {
   _giveTurbo(amount) {
     this.driftTurboGiven = true;
     this.boost = Math.max(this.boost, amount);
-    this.speed = Math.max(this.speed, this.stats.maxSpeed * (0.86 + amount * 0.09));
-    this.hop = Math.max(this.hop, 0.22);
+    this.speed = Math.max(this.speed + 2.2 + amount * 1.8, this.stats.maxSpeed * 0.92);
+    this.hop = Math.max(this.hop, 0.18);
     this.wantsBoostSfx = true;
     this.boostBurst = true;
   }
@@ -164,20 +166,18 @@ export class Kart {
         this.driftHold = 0;
         this.driftTurboGiven = false;
         this.driftBoostLevel = 0;
-        this.hop = 0.86;
+        this.hop = 0.78;
       }
       this.driftHold += dt * (this.stats.driftBonus || 1);
-      this.driftStage = this.driftHold >= 2.35 ? 3 : this.driftHold >= 1.15 ? 2 : this.driftHold >= 0.4 ? 1 : 0;
+      this.driftStage = this.driftHold >= 2.2 ? 3 : this.driftHold >= 1.1 ? 2 : this.driftHold >= 0.45 ? 1 : 0;
       this.driftBoostLevel = this.driftStage;
-      steer = this.driftDir * 0.4 + steer * 0.2;
-      if (!this.driftTurboGiven && this.driftStage >= 3 && this.speed > 7) {
-        this._giveTurbo(1.85);
-      }
+      const inward = THREE.MathUtils.clamp(steer * this.driftDir, -1, 1);
+      steer = this.driftDir * (0.46 + Math.max(0, inward) * 0.4) + Math.min(0, inward) * 0.14 * this.driftDir;
     } else if (this.drifting) {
       if (!this.driftTurboGiven && this.speed > 7 && !this.finished) {
-        if (this.driftStage >= 3) this._giveTurbo(1.85);
-        else if (this.driftStage >= 2) this._giveTurbo(1.2);
-        else if (this.driftStage >= 1) this._giveTurbo(0.58);
+        if (this.driftStage >= 3) this._giveTurbo(1.95);
+        else if (this.driftStage >= 2) this._giveTurbo(1.25);
+        else if (this.driftStage >= 1) this._giveTurbo(0.62);
       }
       this.drifting = false;
       this.driftHold = 0;
@@ -191,7 +191,8 @@ export class Kart {
       this.stats.maxSpeed *
       this.speedMul *
       (this.offroad ? this.stats.offroadMul ?? 0.72 : 1) *
-      (boosting ? 1.36 : 1) *
+      (boosting ? 1.48 : 1) *
+      (this.drifting ? 1.04 : 1) *
       (this.finished ? 0.35 : 1);
     const slopeStep = 5 / Math.max(12, track.length);
     const slope = (track.at(this.t + slopeStep).point.y - track.at(this.t).point.y) / 5;
@@ -201,11 +202,9 @@ export class Kart {
       if (input.brake) {
         this.speed -= 34 * dt;
       } else {
-        // Convert the acceleration stat into a target time-to-top-speed.
-        // This makes the stat relationship explicit: larger accel = less time.
         const accelTime = ACCEL_TIME_REFERENCE / Math.max(1, this.stats.accel);
         const accelRate = cap / accelTime;
-        this.speed += accelRate * (boosting ? 1.35 : 1) * dt;
+        this.speed += accelRate * (boosting ? 1.55 : 1) * dt;
       }
       this.speed += -slope * 28 * dt;
     } else {
@@ -213,8 +212,9 @@ export class Kart {
     }
     this.speed = THREE.MathUtils.clamp(this.speed, input.brake ? -7 : 0, cap * hillMul);
 
-    const grip = THREE.MathUtils.clamp(Math.abs(this.speed) / 10, 0.18, 1);
-    const rate = this.stats.handling * (this.drifting ? 1.12 : 1.82) * (this.luckyT > 0 ? 1.72 : 1);
+    const airborne = this.hop > 0.12;
+    const grip = THREE.MathUtils.clamp(Math.abs(this.speed) / 10, 0.18, 1) * (airborne ? 0.72 : 1);
+    const rate = this.stats.handling * (this.drifting ? 1.28 : 1.82) * (this.luckyT > 0 ? 1.72 : 1);
     this.yaw += -steer * rate * grip * dt;
     this.steerVis = THREE.MathUtils.damp(this.steerVis, steer, 12, dt);
 
@@ -232,12 +232,13 @@ export class Kart {
 
     if (this.isPlayer) {
       const handsOff = 1 - Math.min(1, Math.abs(input.steer));
-      const lock = this.drifting ? 0.22 : 1;
-      const assist = handsOff * (this.offroad ? 5.2 : 2.7) * (this.drifting ? 0.4 : 1);
+      const lock = this.drifting ? 0.18 : 1;
+      const assist = handsOff * (this.offroad ? 3.4 : 1.45) * (this.drifting ? 0.28 : 1);
       this.yaw += align * Math.min(1, assist * dt);
-      lat += -lat * dt * 1.6 * handsOff * lock;
+      lat += -lat * dt * 1.15 * handsOff * lock;
     } else {
-      this.yaw = trackYaw;
+      const want = trackYaw - (this.drifting ? this.driftDir * 0.38 : 0);
+      this.yaw += wrapPi(want - this.yaw) * Math.min(1, 11 * dt);
       const laneMax = Math.max(0.55, hw - 1.15);
       const lane = THREE.MathUtils.clamp(this.aiOffset, -laneMax, laneMax);
       lat += (lane - lat) * Math.min(1, 5.5 * dt);
@@ -247,13 +248,19 @@ export class Kart {
 
     const wall = hw + 0.28;
     if (Math.abs(lat) > wall) {
+      const first = !this._walled;
+      this._walled = true;
       lat = Math.sign(lat) * wall;
       this.yaw = trackYaw;
-      // Wall contact is now a meaningful mistake: lose speed and suffer a
-      // short stun instead of simply being nudged back onto the track.
-      this.speed *= 0.55;
-      this.stun = Math.max(this.stun, 0.32);
-      this.hitFlash = Math.max(this.hitFlash, 0.2);
+      if (first) {
+        this.speed *= 0.62;
+        this.stun = Math.max(this.stun, 0.16);
+        this.hitFlash = Math.max(this.hitFlash, 0.14);
+      } else {
+        this.speed *= Math.pow(0.42, dt);
+      }
+    } else {
+      this._walled = false;
     }
     this.lateral = lat;
     this.snapToTrack(track);
@@ -325,11 +332,16 @@ export function aiInput(kart, track, rivals = [], obstacles = []) {
       offset += elat >= kart.lateral ? -1.75 : 1.75;
     }
   }
+  const a0 = Math.atan2(track.at(kart.t).tangent.x, track.at(kart.t).tangent.z);
+  const a1 = Math.atan2(track.at((kart.t + 0.032) % 1).tangent.x, track.at((kart.t + 0.032) % 1).tangent.z);
+  const curve = wrapPi(a1 - a0);
+  const wantDrift = Math.abs(curve) > 0.11 && kart.speed > 11 && !kart.stun;
   kart.aiOffset = THREE.MathUtils.damp(kart.aiOffset, THREE.MathUtils.clamp(offset, -laneMax, laneMax), 3.5, 0.016);
   const laneErr = kart.lateral - kart.aiOffset;
-  const steer = THREE.MathUtils.clamp(laneErr * 0.25, -0.45, 0.45);
-  const drift = Math.abs(laneErr) > 1.6 && kart.speed > 14;
-  return { steer, drift, brake: false };
+  const steer = wantDrift
+    ? Math.sign(curve || kart.driftDir || 1) * 0.62
+    : THREE.MathUtils.clamp(laneErr * 0.25, -0.45, 0.45);
+  return { steer, drift: wantDrift, brake: false };
 }
 
 export function bumpKarts(a, b) {
@@ -349,6 +361,13 @@ export function bumpKarts(a, b) {
   b.pos.x -= nx * overlap * (1 - wa);
   b.pos.z -= nz * overlap * (1 - wa);
   const rel = a.speed - b.speed;
-  a.speed -= rel * 0.12 * b.stats.weight;
-  b.speed += rel * 0.12 * a.stats.weight;
+  a.speed -= rel * 0.2 * b.stats.weight;
+  b.speed += rel * 0.2 * a.stats.weight;
+  if (Math.abs(rel) > 7) {
+    const victim = rel > 0 ? b : a;
+    if (victim.shield <= 0 && victim.ghostT <= 0) {
+      victim.stun = Math.max(victim.stun, 0.2);
+      victim.hitFlash = Math.max(victim.hitFlash, 0.18);
+    }
+  }
 }

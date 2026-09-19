@@ -125,10 +125,11 @@ export class Game {
         isPlayer,
         name: stats.name,
       });
-      const t = (1 - 0.018 * (i + 1) + 1) % 1;
-      const lat = isPlayer ? 0 : i % 2 === 0 ? -1.35 : 1.35;
-      kart.spawn(this.track, t, lat);
-      if (!isPlayer) kart.aiOffset = lat;
+      const col = i % 2 === 0 ? -1.2 : 1.2;
+      const row = Math.floor(i / 2);
+      const t = (1 - 0.02 * (row + 1) + 1) % 1;
+      kart.spawn(this.track, t, col);
+      if (!isPlayer) kart.aiOffset = col;
       return kart;
     });
     this.player = this.karts.find((k) => k.isPlayer) ?? this.karts[0];
@@ -207,11 +208,21 @@ export class Game {
       this.hooks?.onHud(this._hud());
       if (this.countT >= 3.35) {
         this.phase = "racing";
+        const rocket = !!this.input?.sample()?.drift;
         for (const k of this.karts) {
-          k.boost = Math.max(k.boost, 0.62);
-          k.speed = Math.max(k.speed, k.stats.maxSpeed * 0.38);
+          const cpuRocket = !k.isPlayer && Math.random() < 0.42;
+          const go = k.isPlayer ? rocket : cpuRocket;
+          if (go) {
+            k.boost = Math.max(k.boost, 1.28);
+            k.speed = Math.max(k.speed, k.stats.maxSpeed * 0.78);
+            k.boostBurst = true;
+          } else {
+            k.boost = Math.max(k.boost, 0.28);
+            k.speed = Math.max(k.speed, k.stats.maxSpeed * 0.26);
+          }
           k.slipstreamT = 0;
         }
+        if (rocket) this.hooks?.onBanner("ロケットスタート！");
         this.audio?.boost();
       }
       return;
@@ -242,7 +253,7 @@ export class Game {
       } else {
         input = aiInput(kart, this.track, this.karts, this.obstacles?.list ?? []);
         kart.aiItemT = (kart.aiItemT || 0) + dt;
-        if (kart.item && kart.roulette <= 0 && kart.aiItemT > 1.4) {
+        if (kart.item && kart.roulette <= 0 && kart.aiItemT > 2.2) {
           this.items.use(kart, this.karts, this.audio);
           kart.aiItemT = 0;
         }
@@ -360,7 +371,7 @@ export class Game {
       if (full) continue;
       box.cooldown = 3.6;
       box.mesh.visible = false;
-      kart.roulette = 0.55;
+      kart.roulette = 1.85;
       const got = rollItem(kart.place);
       kart.item = got.id;
       kart.rouletteShow = got;
@@ -377,8 +388,9 @@ export class Game {
       const dt = Math.abs(kart.t - pad.t);
       const wrap = Math.min(dt, 1 - dt);
       if (wrap < 0.012 && Math.abs(kart.lateral) < 3.2 && kart.speed > 6) {
-        if (kart.boost < 0.9) {
-          kart.boost = 1.15;
+        if (kart.boost < 1.05) {
+          kart.boost = 1.35;
+          kart.speed = Math.max(kart.speed, kart.stats.maxSpeed * 1.06);
           kart.boostBurst = true;
           if (kart.isPlayer) this.audio?.boost();
         }
@@ -397,20 +409,20 @@ export class Game {
   _snapCamera(instant, dt = 0.016) {
     const p = this.player;
     const boosting = p.boost > 0;
-    const back = 5.9 + Math.min(1.9, p.speed * 0.036) + (boosting ? 0.42 : 0) + (p.drifting ? 0.16 : 0);
-    const height = 2.42 + Math.min(0.5, p.speed * 0.01) + (p.drifting ? 0.08 : 0);
-    const look = 5.2 + Math.min(1.7, p.speed * 0.032);
-    const side = -p.steerVis * (p.drifting ? 1.35 : 0.82);
+    const back = 5.48 + Math.min(1.55, p.speed * 0.03) + (boosting ? 0.4 : 0) + (p.drifting ? 0.14 : 0);
+    const height = 2.18 + Math.min(0.4, p.speed * 0.008) + (p.drifting ? 0.06 : 0);
+    const look = 4.65 + Math.min(1.35, p.speed * 0.026);
+    const side = -p.steerVis * (p.drifting ? 1.42 : 0.86);
     const nx = Math.sin(p.yaw);
     const nz = Math.cos(p.yaw);
     const rx = nz;
     const rz = -nx;
     _wanted.set(
       p.pos.x - nx * back + rx * side,
-      p.pos.y + height + (p.hop > 0 ? p.hop * 0.22 : 0),
+      p.pos.y + height + (p.hop > 0 ? p.hop * 0.2 : 0),
       p.pos.z - nz * back + rz * side
     );
-    _look.set(p.pos.x + nx * look + rx * side * 0.28, p.pos.y + 0.95, p.pos.z + nz * look + rz * side * 0.28);
+    _look.set(p.pos.x + nx * look + rx * side * 0.3, p.pos.y + 0.86, p.pos.z + nz * look + rz * side * 0.3);
     if (instant || !this._camReady) {
       this.camera.position.copy(_wanted);
       this._lookSmooth.copy(_look);
@@ -459,6 +471,7 @@ export class Game {
       time: this.elapsed,
       itemIcon: icon,
       countdown: this.phase === "countdown" ? this.countShown : -1,
+      startHint: this.phase === "countdown" && this.countShown > 0,
       standings: [...this.karts]
         .sort((a, b) => a.place - b.place)
         .map((k) => ({
