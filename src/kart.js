@@ -112,7 +112,7 @@ export class Kart {
     const f = track.at(this.t);
     const wall = track.halfWidthAt(this.t) + 0.28;
     this.lateral = THREE.MathUtils.clamp(this.lateral, -wall, wall);
-    const hopY = Math.sin(Math.max(0, this.hop) * Math.PI) * (this.leapT > 0 ? 2.35 : 0.5);
+    const hopY = Math.sin(Math.max(0, this.hop) * Math.PI) * (this.leapT > 0 ? 3.1 : 0.5);
     this.pos.copy(f.point).addScaledVector(f.binormal, this.lateral);
     this.pos.y = f.point.y + 0.08 + hopY;
   }
